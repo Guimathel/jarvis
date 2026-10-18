@@ -284,6 +284,8 @@
     <select id="voice-select"></select>
     <label for="voice-rate">Vitesse : <span id="voice-rate-val">1,0×</span></label>
     <input id="voice-rate" type="range" min="0.7" max="1.4" step="0.05" value="1">
+    <label for="voice-pitch">Hauteur : <span id="voice-pitch-val">normale</span></label>
+    <input id="voice-pitch" type="range" min="0.5" max="1.5" step="0.05" value="1">
     <button type="button" class="btn-primary" id="voice-test">Écouter un exemple</button>
     <p class="hint" id="voice-hint"></p>
   </div>
@@ -512,6 +514,14 @@ function speakable(text) {
 function stopSpeaking() { try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch { /* rien */ } }
 let voiceURI = store.get("jarvis.voice", "");
 let voiceRate = Math.min(1.4, Math.max(0.7, parseFloat(store.get("jarvis.rate", "1")) || 1));
+let voicePitch = Math.min(1.5, Math.max(0.5, parseFloat(store.get("jarvis.pitch", "1")) || 1));
+function pitchLabel(p) {
+  if (p < 0.8) return "très grave";
+  if (p < 0.95) return "grave";
+  if (p <= 1.05) return "normale";
+  if (p <= 1.2) return "un peu aiguë";
+  return "aiguë";
+}
 
 function frenchVoices() {
   try {
@@ -529,6 +539,7 @@ function speakRaw(text) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
     u.rate = voiceRate;
+    u.pitch = voicePitch;
     const v = pickVoice();
     if (v) { u.voice = v; u.lang = v.lang; }
     speechSynthesis.speak(u);
@@ -564,6 +575,8 @@ function openVoice() {
   fillVoices();
   $("voice-rate").value = String(voiceRate);
   $("voice-rate-val").textContent = voiceRate.toFixed(2).replace(/0$/, "").replace(".", ",") + "×";
+  $("voice-pitch").value = String(voicePitch);
+  $("voice-pitch-val").textContent = pitchLabel(voicePitch);
   $("voice-dialog").showModal();
 }
 
@@ -740,6 +753,12 @@ $("voice-rate").addEventListener("input", () => {
   $("voice-rate-val").textContent = voiceRate.toFixed(2).replace(/0$/, "").replace(".", ",") + "×";
 });
 $("voice-rate").addEventListener("change", () => speakRaw(SAMPLE));
+$("voice-pitch").addEventListener("input", () => {
+  voicePitch = parseFloat($("voice-pitch").value) || 1;
+  store.set("jarvis.pitch", String(voicePitch));
+  $("voice-pitch-val").textContent = pitchLabel(voicePitch);
+});
+$("voice-pitch").addEventListener("change", () => speakRaw(SAMPLE));
 $("voice-test").addEventListener("click", () => speakRaw(SAMPLE));
 if ("speechSynthesis" in window) {
   try {
