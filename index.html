@@ -546,6 +546,8 @@ async function loadApp() {
   // Option « écouter dès l'ouverture » : le micro ne s'allume qu'au lancement de l'appli.
   if (store.get("jarvis.autolisten", "0") === "1" && SR && !autoListened) {
     autoListened = true;
+    openPresence(); presenceAuto = true;   // le robot apparaît et Jarvis écoute
+    presenceCaption("Je t'écoute…");
     setTimeout(startListening, 600);
   }
 }
@@ -579,8 +581,8 @@ function pickVoice() {
   const list = frenchVoices();
   return list.find((v) => v.voiceURI === voiceURI) || list[0] || null;
 }
-function speakRaw(text) {
-  if (!("speechSynthesis" in window)) return;
+function speakRaw(text, done) {
+  if (!("speechSynthesis" in window)) { if (done) done(); return; }
   try {
     wakePause();   // le micro ne doit pas écouter la voix de Jarvis
     speechSynthesis.cancel();
@@ -592,10 +594,10 @@ function speakRaw(text) {
     if (v) { u.voice = v; u.lang = v.lang; }
     const id = ++speakId;
     u.onstart = () => { if (id === speakId) { speakingNow = true; syncOrb(); } };
-    u.onend = u.onerror = () => { if (id === speakId) { speakingNow = false; syncOrb(); } };
+    u.onend = u.onerror = () => { if (id === speakId) { speakingNow = false; syncOrb(); if (done) done(); } };
     u.onboundary = () => { avBump = 1; };   // un mot vient d'être prononcé : le halo pulse
     speechSynthesis.speak(u);
-  } catch { /* synthèse indisponible */ }
+  } catch { if (done) done(); /* synthèse indisponible */ }
 }
 function speak(text) { if (ttsOn) speakRaw(speakable(text)); }
 
@@ -739,9 +741,16 @@ function handleWake(t) {
   const m = WAKE_RE.exec(t);
   if (!m) return;
   const rest = t.slice(m.index + m[0].length).replace(/^[\s,.:;!?-]+/, "").trim();
-  wakeHold = Date.now() + 2500;
+  wakeHold = Date.now() + 8000;
+  if (presenceEl.hidden) { openPresence(); presenceAuto = true; }   // le robot apparaît
   if (rest.length > 1) send(rest, true);
-  else { toast("Je t'écoute…"); setTimeout(startListening, 150); }
+  else {
+    presenceCaption("Je t'écoute…");
+    let go = false;
+    const listen = () => { if (go) return; go = true; setTimeout(startListening, 200); };
+    speakRaw("Je t'écoute.", listen);   // il répond à voix haute, puis écoute
+    setTimeout(listen, 3500);           // secours si la voix ne se déclenche pas
+  }
 }
 function startWake() {
   wakeRec = new SR();
@@ -902,19 +911,27 @@ function avFrame(ts) {
     rrect(cxm - mw / 2 + i * (bw + gap), my - bh / 2, bw, bh, bw / 2); cx.fill();
   }
 }
+// Ouvert automatiquement (« Hey Jarvis » ou écoute à l'ouverture) : il se referme tout seul après 20 s de calme.
+let presenceAuto = false, lastAct = 0;
+setInterval(() => {
+  if (speakingNow || listening || busy) { lastAct = Date.now(); return; }
+  if (presenceAuto && !presenceEl.hidden && Date.now() - lastAct > 20000) { closePresence(); }
+}, 2000);
 function openPresence() {
   closeMenu();
+  lastAct = Date.now();
   presenceEl.hidden = false; avResize(); avT0 = 0;
   if (!avRaf) avRaf = requestAnimationFrame(avFrame);
   const last = [...document.querySelectorAll(".msg.assistant")].pop();
   presenceCaption(last ? last.textContent : "Dis-moi quelque chose.");
 }
 function closePresence() {
+  presenceAuto = false;
   presenceEl.hidden = true;
   if (avRaf) { cancelAnimationFrame(avRaf); avRaf = 0; }
 }
 window.addEventListener("resize", () => { if (!presenceEl.hidden) avResize(); });
-$("m-presence").addEventListener("click", openPresence);
+$("m-presence").addEventListener("click", () => { openPresence(); presenceAuto = false; });
 $("p-close").addEventListener("click", closePresence);
 cv.addEventListener("click", stopSpeaking);
 $("p-mic").addEventListener("click", () => { if (listening) recog.stop(); else startListening(); });
