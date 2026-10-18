@@ -100,7 +100,7 @@
   }
   .title { flex: 1; min-width: 0; }
   .title strong { display: block; font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-  .title span { display: block; font-size: 12px; color: var(--muted); }
+  .title span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
   .seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; font-size: 13px; color: var(--muted); }
   .seg button[aria-pressed=true] { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
@@ -139,6 +139,9 @@
   .msg pre code { background: none; padding: 0; }
   .msg a { color: var(--accent); }
   .mem-note { align-self: flex-start; font-size: 12.5px; color: var(--ok); padding: 0 6px; }
+  .sources { align-self: flex-start; max-width: 88%; font-size: 12.5px; color: var(--muted); padding: 0 6px; overflow-wrap: anywhere; }
+  .sources a { color: var(--accent); text-decoration: none; }
+  .sources a:hover { text-decoration: underline; }
   @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
   .typing { display: inline-flex; gap: 5px; padding: 14px 16px; }
@@ -177,6 +180,15 @@
   .mem span { flex: 1; }
   .mem button { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px 10px; color: var(--danger); font-size: 13px; }
   .dlg-empty { padding: 22px 10px; text-align: center; color: var(--muted); }
+  .form-body { display: grid; gap: 12px; padding: 16px 18px 20px; }
+  select {
+    width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); font: inherit; font-size: 16px; outline: none;
+  }
+  select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,209,255,.15); }
+  select:disabled { opacity: .5; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .hint { margin: 0; color: var(--muted); font-size: 13px; }
 
   #toast {
     position: fixed; left: 50%; bottom: calc(86px + var(--safe-bottom)); transform: translateX(-50%); z-index: 50;
@@ -228,6 +240,7 @@
   <div id="menu" role="menu" hidden>
     <button id="m-memory" role="menuitem">Mémoire de Jarvis <small>›</small></button>
     <button id="m-tts" role="menuitem">Lecture vocale <small id="m-tts-state">désactivée</small></button>
+    <button id="m-voice" role="menuitem">Voix de Jarvis <small>›</small></button>
     <button id="m-install" role="menuitem" hidden>Installer sur cet appareil <small>↓</small></button>
     <hr>
     <button id="m-clear" role="menuitem" class="danger">Effacer la conversation</button>
@@ -259,6 +272,23 @@
   <div class="dlg-body" id="memory-list"></div>
 </dialog>
 
+<dialog id="voice-dialog">
+  <div class="dlg-head">
+    <h3>Voix de Jarvis</h3>
+    <button class="icon-btn" id="voice-close" aria-label="Fermer">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="form-body">
+    <label for="voice-select">Voix</label>
+    <select id="voice-select"></select>
+    <label for="voice-rate">Vitesse : <span id="voice-rate-val">1,0×</span></label>
+    <input id="voice-rate" type="range" min="0.7" max="1.4" step="0.05" value="1">
+    <button type="button" class="btn-primary" id="voice-test">Écouter un exemple</button>
+    <p class="hint" id="voice-hint"></p>
+  </div>
+</dialog>
+
 <div id="toast" role="status" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -273,7 +303,8 @@ const CONFIG = {
   SUPABASE_URL: "https://qcmfubynjidftonhrldt.supabase.co",
   SUPABASE_KEY: "sb_publishable_M9MRnq1rsD7WQ5Ors-8BOg_DVqandAa",
 };
-CONFIG.FUNCTION_URL = CONFIG.SUPABASE_URL + "/functions/v1/chat";
+CONFIG.FUNCTION_NAME = "hyper-processor"; // nom (slug) de la fonction créée dans Supabase
+CONFIG.FUNCTION_URL = CONFIG.SUPABASE_URL + "/functions/v1/" + CONFIG.FUNCTION_NAME;
 
 const $ = (id) => document.getElementById(id);
 const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
@@ -362,6 +393,33 @@ function addMemNote(changes) {
   scrollDown();
 }
 
+function addSources(list) {
+  if (!Array.isArray(list)) return;
+  const seen = new Set();
+  const items = [];
+  for (const s of list) {
+    if (!s || typeof s.url !== "string" || !/^https?:\/\//i.test(s.url)) continue;
+    let host = s.url;
+    try { host = new URL(s.url).hostname.replace(/^www\./, ""); } catch { continue; }
+    if (seen.has(host)) continue;
+    seen.add(host);
+    items.push({ host, url: s.url, title: s.title || host });
+  }
+  if (!items.length) return;
+  const el = document.createElement("div");
+  el.className = "sources";
+  el.append("Sources : ");
+  items.forEach((it, i) => {
+    if (i) el.append(" · ");
+    const a = document.createElement("a");
+    a.href = it.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.textContent = it.host; a.title = it.title;
+    el.append(a);
+  });
+  $("wrap").appendChild(el);
+  scrollDown();
+}
+
 function showTyping() {
   const el = document.createElement("div");
   el.className = "msg assistant typing";
@@ -394,8 +452,17 @@ function showEmpty() {
   $("wrap").appendChild(el);
 }
 
-function setUsage(used, limit) {
-  $("usage").textContent = (used != null && limit != null) ? used + " / " + limit + " messages aujourd'hui" : " ";
+const usageState = { used: null, limit: null, sUsed: null, sLimit: null };
+function setUsage(used, limit, sUsed, sLimit) {
+  if (used != null) usageState.used = used;
+  if (limit != null) usageState.limit = limit;
+  if (sUsed != null) usageState.sUsed = sUsed;
+  if (sLimit != null) usageState.sLimit = sLimit;
+  const s = usageState, parts = [], full = [];
+  if (s.used != null && s.limit != null) { parts.push(s.used + "/" + s.limit + " msg"); full.push(s.used + " messages sur " + s.limit); }
+  if (s.sUsed != null && s.sLimit != null) { parts.push(s.sUsed + "/" + s.sLimit + " web"); full.push(s.sUsed + " recherches web sur " + s.sLimit); }
+  $("usage").textContent = parts.length ? parts.join(" · ") : " ";
+  $("usage").title = full.length ? "Aujourd'hui : " + full.join(", ") : "";
 }
 
 function setOrb(state) {
@@ -421,13 +488,15 @@ async function loadApp() {
   const uid = session.user.id;
 
   const [p, u, m] = await Promise.all([
-    sb.from("profiles").select("display_name, daily_limit, role").eq("id", uid).maybeSingle(),
-    sb.from("usage_daily").select("requests").eq("user_id", uid).eq("day", todayParis()).maybeSingle(),
+    sb.from("profiles").select("*").eq("id", uid).maybeSingle(),
+    sb.from("usage_daily").select("*").eq("user_id", uid).eq("day", todayParis()).maybeSingle(),
     sb.from("messages").select("role, content").eq("user_id", uid).order("created_at", { ascending: false }).limit(40),
   ]);
 
   profile = p.data || { display_name: "", daily_limit: null };
-  setUsage(u.data ? u.data.requests : 0, profile.daily_limit);
+  setUsage(u.data ? u.data.requests : 0, profile.daily_limit,
+           u.data && u.data.searches != null ? u.data.searches : (profile.daily_search_limit != null ? 0 : null),
+           profile.daily_search_limit);
 
   const rows = (m.data || []).slice().reverse();
   if (!rows.length) showEmpty();
@@ -441,17 +510,61 @@ function speakable(text) {
   return text.replace(/```[\s\S]*?```/g, " ").replace(/https?:\/\/\S+/g, " lien ").replace(/[*`#_]/g, "");
 }
 function stopSpeaking() { try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch { /* rien */ } }
-function speak(text) {
-  if (!ttsOn || !("speechSynthesis" in window)) return;
+let voiceURI = store.get("jarvis.voice", "");
+let voiceRate = Math.min(1.4, Math.max(0.7, parseFloat(store.get("jarvis.rate", "1")) || 1));
+
+function frenchVoices() {
+  try {
+    return speechSynthesis.getVoices().filter((v) => v.lang && v.lang.toLowerCase().replace("_", "-").startsWith("fr"));
+  } catch { return []; }
+}
+function pickVoice() {
+  const list = frenchVoices();
+  return list.find((v) => v.voiceURI === voiceURI) || list[0] || null;
+}
+function speakRaw(text) {
+  if (!("speechSynthesis" in window)) return;
   try {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(speakable(text));
+    const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
-    const v = speechSynthesis.getVoices().find((x) => x.lang && x.lang.toLowerCase().startsWith("fr"));
-    if (v) u.voice = v;
-    u.onstart = () => {}; u.onend = () => {};
+    u.rate = voiceRate;
+    const v = pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
     speechSynthesis.speak(u);
   } catch { /* synthèse indisponible */ }
+}
+function speak(text) { if (ttsOn) speakRaw(speakable(text)); }
+
+/* ---------- Voix : réglages ---------- */
+const SAMPLE = "Bonjour, je suis Jarvis. Voici ma voix.";
+function fillVoices() {
+  const sel = $("voice-select"), list = frenchVoices();
+  sel.innerHTML = "";
+  if (!list.length) {
+    sel.disabled = true;
+    const o = document.createElement("option"); o.textContent = "Aucune voix française trouvée"; sel.appendChild(o);
+    $("voice-hint").textContent = "Sur Android : Réglages → Langue et saisie (ou Accessibilité) → Synthèse vocale, puis installe les données vocales françaises.";
+    return;
+  }
+  sel.disabled = false;
+  list.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v.voiceURI;
+    o.textContent = v.name + (v.localService ? "" : " (en ligne)");
+    sel.appendChild(o);
+  });
+  const cur = pickVoice();
+  if (cur) sel.value = cur.voiceURI;
+  $("voice-hint").textContent = "Les voix proposées dépendent de ton appareil. La lecture vocale s'active dans le menu.";
+}
+function openVoice() {
+  closeMenu();
+  if (!("speechSynthesis" in window)) { toast("Lecture vocale non prise en charge ici."); return; }
+  fillVoices();
+  $("voice-rate").value = String(voiceRate);
+  $("voice-rate-val").textContent = voiceRate.toFixed(2).replace(/0$/, "").replace(".", ",") + "×";
+  $("voice-dialog").showModal();
 }
 
 /* ---------- Envoi d'un message ---------- */
@@ -491,8 +604,9 @@ async function send(text, fromVoice) {
       return;
     }
     addMessage("assistant", payload.reply);
+    addSources(payload.sources);
     addMemNote(payload.memory_changes);
-    setUsage(payload.used, payload.limit);
+    setUsage(payload.used, payload.limit, payload.searches_today, payload.search_limit);
     speak(payload.reply);
   } catch (e) {
     hideTyping();
@@ -612,6 +726,27 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(
 $("m-memory").addEventListener("click", openMemory);
 $("memory-close").addEventListener("click", () => $("memory-dialog").close());
 $("memory-dialog").addEventListener("click", (e) => { if (e.target === $("memory-dialog")) $("memory-dialog").close(); });
+
+$("m-voice").addEventListener("click", openVoice);
+$("voice-close").addEventListener("click", () => $("voice-dialog").close());
+$("voice-dialog").addEventListener("click", (e) => { if (e.target === $("voice-dialog")) $("voice-dialog").close(); });
+$("voice-dialog").addEventListener("close", stopSpeaking);
+$("voice-select").addEventListener("change", () => {
+  voiceURI = $("voice-select").value; store.set("jarvis.voice", voiceURI); speakRaw(SAMPLE);
+});
+$("voice-rate").addEventListener("input", () => {
+  voiceRate = parseFloat($("voice-rate").value) || 1;
+  store.set("jarvis.rate", String(voiceRate));
+  $("voice-rate-val").textContent = voiceRate.toFixed(2).replace(/0$/, "").replace(".", ",") + "×";
+});
+$("voice-rate").addEventListener("change", () => speakRaw(SAMPLE));
+$("voice-test").addEventListener("click", () => speakRaw(SAMPLE));
+if ("speechSynthesis" in window) {
+  try {
+    speechSynthesis.getVoices();   // déclenche le chargement des voix
+    speechSynthesis.addEventListener("voiceschanged", () => { if ($("voice-dialog").open) fillVoices(); });
+  } catch { /* rien */ }
+}
 
 $("m-tts").addEventListener("click", () => {
   ttsOn = !ttsOn; store.set("jarvis.tts", ttsOn ? "1" : "0"); applyTts();
