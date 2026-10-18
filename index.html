@@ -240,6 +240,8 @@
   <div id="menu" role="menu" hidden>
     <button id="m-memory" role="menuitem">Mémoire de Jarvis <small>›</small></button>
     <button id="m-tts" role="menuitem">Lecture vocale <small id="m-tts-state">désactivée</small></button>
+    <button id="m-wake" role="menuitem">Mode écoute « Hey Jarvis » <small id="m-wake-state">désactivé</small></button>
+    <button id="m-auto" role="menuitem">Écouter dès l'ouverture <small id="m-auto-state">désactivé</small></button>
     <button id="m-voice" role="menuitem">Voix de Jarvis <small>›</small></button>
     <button id="m-install" role="menuitem" hidden>Installer sur cet appareil <small>↓</small></button>
     <hr>
@@ -505,7 +507,13 @@ async function loadApp() {
   rows.forEach((r) => addMessage(r.role, r.content));
   if (p.error || m.error) addMessage("error", "Certaines données n'ont pas pu être chargées. Vérifie la connexion.");
   scrollDown();
+  // Option « écouter dès l'ouverture » : le micro ne s'allume qu'au lancement de l'appli.
+  if (store.get("jarvis.autolisten", "0") === "1" && SR && !autoListened) {
+    autoListened = true;
+    setTimeout(startListening, 600);
+  }
 }
+let autoListened = false;
 
 /* ---------- Voix : lecture ---------- */
 function speakable(text) {
@@ -535,6 +543,7 @@ function pickVoice() {
 function speakRaw(text) {
   if (!("speechSynthesis" in window)) return;
   try {
+    wakePause();   // le micro ne doit pas écouter la voix de Jarvis
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "fr-FR";
@@ -667,6 +676,63 @@ function startListening() {
   try { recog.start(); } catch { toast("Impossible de démarrer le micro."); }
 }
 
+/* ---------- Mode écoute « Hey Jarvis » ---------- */
+// Chrome écoute en boucle ; seule une phrase contenant « Jarvis » est envoyée à Claude.
+// La reconnaissance vocale est faite par le service de Chrome (aucun crédit Anthropic) ;
+// le crédit n'est utilisé que lorsqu'une question est réellement envoyée.
+const WAKE_RE = /\b(?:(?:hey|hé|eh|ok|salut|dis)\s+)?j[ae]rvi[sz]e?\b/i;
+let wakeOn = store.get("jarvis.wake", "0") === "1";
+let wakeRec = null, wakeActive = false, wakeHeard = "", wakeHold = 0, wakeLock = null;
+
+function applyWake() { $("m-wake-state").textContent = wakeOn ? "activé" : "désactivé"; }
+function wakePause() {
+  wakeHeard = ""; wakeHold = Date.now() + 1500;
+  try { if (wakeRec && wakeActive) wakeRec.abort(); } catch { /* rien */ }
+}
+function handleWake(t) {
+  if (!wakeOn || !t) return;
+  const m = WAKE_RE.exec(t);
+  if (!m) return;
+  const rest = t.slice(m.index + m[0].length).replace(/^[\s,.:;!?-]+/, "").trim();
+  wakeHold = Date.now() + 2500;
+  if (rest.length > 1) send(rest, true);
+  else { toast("Je t'écoute…"); setTimeout(startListening, 150); }
+}
+function startWake() {
+  wakeRec = new SR();
+  wakeRec.lang = "fr-FR"; wakeRec.interimResults = true; wakeRec.continuous = false;
+  wakeHeard = "";
+  wakeRec.onstart = () => { wakeActive = true; };
+  wakeRec.onresult = (e) => {
+    let t = "";
+    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+    wakeHeard = t.trim();
+  };
+  wakeRec.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      wakeOn = false; store.set("jarvis.wake", "0"); applyWake(); setWakeLock(false);
+      toast("Mode écoute désactivé : autorise le micro pour ce site.");
+    }
+  };
+  wakeRec.onend = () => { wakeActive = false; const t = wakeHeard; wakeHeard = ""; handleWake(t); };
+  try { wakeRec.start(); } catch { wakeActive = false; }
+}
+function wakeStep() {
+  if (!wakeOn || !SR || wakeActive || busy || listening || !session || document.hidden) return;
+  if (Date.now() < wakeHold) return;
+  try { if (speechSynthesis.speaking) return; } catch { /* rien */ }
+  if (document.querySelector("dialog[open]")) return;
+  startWake();
+}
+async function setWakeLock(on) {
+  try {
+    if (on && "wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+    else if (wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch { /* écran non verrouillable */ }
+}
+document.addEventListener("visibilitychange", () => { if (wakeOn && !document.hidden) setWakeLock(true); });
+setInterval(wakeStep, 1200);
+
 /* ---------- Mémoire ---------- */
 async function openMemory() {
   closeMenu();
@@ -774,6 +840,21 @@ $("m-tts").addEventListener("click", () => {
   else toast("Lecture vocale non prise en charge ici.");
 });
 
+$("m-wake").addEventListener("click", () => {
+  if (!SR) { toast("Dictée vocale non prise en charge ici."); return; }
+  wakeOn = !wakeOn; store.set("jarvis.wake", wakeOn ? "1" : "0"); applyWake(); setWakeLock(wakeOn);
+  if (wakeOn) toast("Dis « Hey Jarvis » puis ta question. Garde l'écran allumé.");
+  else { wakeHeard = ""; try { if (wakeRec) wakeRec.abort(); } catch { /* rien */ } }
+});
+
+function applyAuto() { $("m-auto-state").textContent = store.get("jarvis.autolisten", "0") === "1" ? "activé" : "désactivé"; }
+$("m-auto").addEventListener("click", () => {
+  if (!SR) { toast("Dictée vocale non prise en charge ici."); return; }
+  const on = store.get("jarvis.autolisten", "0") !== "1";
+  store.set("jarvis.autolisten", on ? "1" : "0"); applyAuto();
+  if (on) toast("Jarvis écoutera dès qu'il s'ouvre.");
+});
+
 $("m-clear").addEventListener("click", async () => {
   closeMenu();
   if (!confirm("Effacer toute la conversation ? Les souvenirs de Jarvis sont conservés.")) return;
@@ -805,7 +886,7 @@ sb.auth.onAuthStateChange((event, s) => {
   }
 });
 
-applyMode(); applyTts(); setupMic();
+applyMode(); applyTts(); setupMic(); applyWake(); applyAuto(); if (wakeOn) setWakeLock(true);
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
