@@ -273,8 +273,7 @@ const CONFIG = {
   SUPABASE_URL: "https://qcmfubynjidftonhrldt.supabase.co",
   SUPABASE_KEY: "sb_publishable_M9MRnq1rsD7WQ5Ors-8BOg_DVqandAa",
 };
-CONFIG.FUNCTION_NAME = "hyper-processor"; // nom (slug) de la fonction créée dans Supabase
-CONFIG.FUNCTION_URL = CONFIG.SUPABASE_URL + "/functions/v1/" + CONFIG.FUNCTION_NAME;
+CONFIG.FUNCTION_URL = CONFIG.SUPABASE_URL + "/functions/v1/chat";
 
 const $ = (id) => document.getElementById(id);
 const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
