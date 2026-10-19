@@ -581,6 +581,19 @@ function pickVoice() {
   const list = frenchVoices();
   return list.find((v) => v.voiceURI === voiceURI) || list[0] || null;
 }
+/* iPhone : Safari n'autorise la voix qu'après un premier geste de l'utilisateur. On "débloque" donc la synthèse au premier toucher. */
+let speechUnlocked = false;
+function unlockSpeech() {
+  if (speechUnlocked || !("speechSynthesis" in window)) return;
+  speechUnlocked = true;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  } catch { /* rien */ }
+}
+["pointerdown", "touchend", "click", "keydown"].forEach((ev) => document.addEventListener(ev, unlockSpeech, { once: true, passive: true }));
+
 function speakRaw(text, done) {
   if (!("speechSynthesis" in window)) { if (done) done(); return; }
   try {
@@ -596,7 +609,8 @@ function speakRaw(text, done) {
     u.onstart = () => { if (id === speakId) { speakingNow = true; syncOrb(); } };
     u.onend = u.onerror = () => { if (id === speakId) { speakingNow = false; syncOrb(); if (done) done(); } };
     u.onboundary = () => { avBump = 1; };   // un mot vient d'être prononcé : le halo pulse
-    speechSynthesis.speak(u);
+    // Sur iOS, un speak() collé à un cancel() est parfois ignoré : on laisse respirer la synthèse.
+    setTimeout(() => { try { speechSynthesis.resume(); speechSynthesis.speak(u); } catch { if (done) done(); } }, 60);
   } catch { if (done) done(); /* synthèse indisponible */ }
 }
 function speak(text) { if (ttsOn) speakRaw(speakable(text)); }
