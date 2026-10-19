@@ -740,7 +740,9 @@ function handleWake(t) {
   if (!wakeOn || !t) return;
   const m = WAKE_RE.exec(t);
   if (!m) return;
-  const rest = t.slice(m.index + m[0].length).replace(/^[\s,.:;!?-]+/, "").trim();
+  let rest = t.slice(m.index + m[0].length).replace(/^[\s,.:;!?-]+/, "").trim();
+  const greet = /\b(bonjour|bonsoir)\b/i.exec(t.slice(0, m.index));   // « Bonjour Jarvis » = un vrai bonjour, pas juste le mot d'éveil
+  if (!rest && greet) rest = greet[1].charAt(0).toUpperCase() + greet[1].slice(1).toLowerCase() + " Jarvis";
   wakeHold = Date.now() + 8000;
   if (presenceEl.hidden) { openPresence(); presenceAuto = true; }   // le robot apparaît
   if (rest.length > 1) send(rest, true);
