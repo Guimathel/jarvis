@@ -616,6 +616,54 @@ function speakRaw(text, done) {
 }
 function speak(text, done) { if (ttsOn) speakRaw(speakable(text), done); }
 
+/* Lecture au fil de l'eau : Jarvis commence à parler dès la 1re phrase reçue, sans attendre la fin de la réponse. */
+function makeSpeaker() {
+  let id = ++speakId, buf = "", acc = "", q = [], playing = false, finished = false, started = false, first = true, inCode = false, doneCb = null;
+  const alive = () => id === speakId;
+  function clean(t) {
+    let out = "";
+    t.split("```").forEach((part, i) => { if (i > 0) inCode = !inCode; if (!inCode) out += part; });
+    return speakable(out);
+  }
+  function pump() {
+    if (!alive() || playing) return;
+    if (!("speechSynthesis" in window)) q.length = 0;
+    const t = q.shift();
+    if (t === undefined) {
+      if (finished) { speakingNow = false; syncOrb(); const cb = doneCb; doneCb = null; if (cb) cb(); }
+      return;
+    }
+    playing = true;
+    wakePause();   // le micro ne doit pas écouter la voix de Jarvis
+    const u = new SpeechSynthesisUtterance(t);
+    u.lang = "fr-FR"; u.rate = voiceRate; u.pitch = voicePitch;
+    const v = pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.onstart = () => { if (alive()) { speakingNow = true; syncOrb(); } };
+    u.onend = u.onerror = () => { if (!alive()) return; playing = false; pump(); };
+    u.onboundary = () => { avBump = 1; };
+    const go = () => { if (!alive()) return; try { speechSynthesis.resume(); speechSynthesis.speak(u); } catch { playing = false; pump(); } };
+    if (!started) { started = true; try { speechSynthesis.cancel(); } catch { /* rien */ } setTimeout(go, 60); } else go();
+  }
+  function push(t) { const c = clean(t); if (c.trim()) q.push(c); pump(); }
+  return {
+    feed(x) {
+      buf += x;
+      let m;
+      while ((m = /([.!?…]+["»)]*|\n)\s+/.exec(buf))) {
+        const end = m.index + m[0].length;
+        acc += buf.slice(0, end); buf = buf.slice(end);
+        if (first || acc.trim().length >= 40) { push(acc); acc = ""; first = false; }
+      }
+    },
+    reset() {
+      id = ++speakId; buf = acc = ""; q = []; playing = false; started = false; first = true; inCode = false;
+      try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch { /* rien */ }
+    },
+    finish(cb) { finished = true; doneCb = cb || null; push(acc + buf); buf = acc = ""; pump(); },
+  };
+}
+
 /* ---------- Voix : réglages ---------- */
 const SAMPLE = "Bonjour, je suis Jarvis. Voici ma voix.";
 function fillVoices() {
@@ -672,34 +720,73 @@ async function send(text, fromVoice) {
         "Authorization": "Bearer " + session.access_token,
         "apikey": CONFIG.SUPABASE_KEY,
       },
-      body: JSON.stringify({ message: text, mode }),
+      body: JSON.stringify({ message: text, mode, stream: true }),
     });
-    let payload = {};
-    try { payload = await res.json(); } catch { /* corps vide */ }
+    const isStream = res.ok && !!res.body && (res.headers.get("content-type") || "").includes("text/event-stream");
+    const spk = ttsOn ? makeSpeaker() : null;
+    let payload = {}, bubble = null, shown = "", streamError = null;
+    if (isStream) {
+      // La réponse arrive par morceaux : on l'affiche et on la prononce au fur et à mesure.
+      const handle = (ev) => {
+        if (ev.t === "d") {
+          if (!bubble) { hideTyping(); bubble = addMessage("assistant", ""); }
+          shown += ev.x; bubble.innerHTML = renderText(shown); scrollDown();
+          if (spk) spk.feed(ev.x);
+        } else if (ev.t === "reset") {
+          shown = ""; if (bubble) bubble.innerHTML = "";
+          if (spk) spk.reset();
+        } else if (ev.t === "done") payload = ev;
+        else if (ev.t === "error") streamError = ev;
+      };
+      const reader = res.body.getReader(), dec = new TextDecoder();
+      let buf = "";
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+            if (chunk.startsWith("data: ")) { try { handle(JSON.parse(chunk.slice(6))); } catch { /* morceau illisible */ } }
+          }
+        }
+      } catch { /* coupure réseau : traitée plus bas */ }
+      if (payload.reply == null && !streamError) streamError = { error: "La réponse a été interrompue, réessaie." };
+    } else {
+      try { payload = await res.json(); } catch { /* corps vide */ }
+    }
     hideTyping();
 
-    if (res.status === 401) { await sb.auth.signOut(); return; }
-    if (!res.ok) {
-      addMessage(res.status === 429 ? "notice" : "error", payload.error || "Une erreur est survenue (" + res.status + ").");
-      if (payload.used != null) setUsage(payload.used, payload.limit);
-      if (res.status !== 429) { $("input").value = text; autosize(); }
+    if (!isStream && res.status === 401) { await sb.auth.signOut(); return; }
+    if (streamError || (!isStream && !res.ok)) {
+      if (spk) spk.reset();
+      stopSpeaking();
+      if (bubble) bubble.remove();
+      const status = streamError ? streamError.status : res.status;
+      const info = streamError || payload;
+      addMessage(status === 429 ? "notice" : "error", info.error || "Une erreur est survenue (" + status + ").");
+      if (info.used != null) setUsage(info.used, info.limit);
+      if (status !== 429) { $("input").value = text; autosize(); }
       return;
     }
-    addMessage("assistant", payload.reply);
+    if (bubble) bubble.innerHTML = renderText(payload.reply); else bubble = addMessage("assistant", payload.reply);
+    scrollDown();
     addSources(payload.sources);
     addMemNote(payload.memory_changes);
     setUsage(payload.used, payload.limit, payload.searches_today, payload.search_limit);
     // Conversation continue : après une question posée à la voix, Jarvis répond puis réécoute tout seul,
     // jusqu'à un mot de fin (« merci », « c'est tout »…), deux silences d'affilée, ou un appui sur le micro.
+    if (spk && !shown) spk.feed(payload.reply);   // réponse arrivée d'un bloc (ordre direct, ancienne version…)
     if (fromVoice && convoOn && ttsOn && SR && !CONVO_END_RE.test(text)) {
       convoActive = true; convoUntil = Date.now() + 90000;
-      speak(payload.reply, () => {
+      if (spk) spk.finish(() => {
         wakeHold = Date.now() + 1500;
         setTimeout(() => { if (convoActive) startListening(); }, 300);
       });
     } else {
       endConvo();
-      speak(payload.reply);
+      if (spk) spk.finish();
     }
     if (!presenceEl.hidden) presenceCaption(payload.reply);
   } catch (e) {
