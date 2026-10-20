@@ -260,6 +260,7 @@
     <button id="m-tts" role="menuitem">Lecture vocale <small id="m-tts-state">désactivée</small></button>
     <button id="m-presence" role="menuitem">Mode présence <small>›</small></button>
     <button id="m-wake" role="menuitem">Mode écoute « Hey Jarvis » <small id="m-wake-state">désactivé</small></button>
+    <button id="m-convo" role="menuitem">Conversation continue <small id="m-convo-state">activée</small></button>
     <button id="m-auto" role="menuitem">Écouter dès l'ouverture <small id="m-auto-state">désactivé</small></button>
     <button id="m-voice" role="menuitem">Voix de Jarvis <small>›</small></button>
     <button id="m-install" role="menuitem" hidden>Installer sur cet appareil <small>↓</small></button>
@@ -613,7 +614,7 @@ function speakRaw(text, done) {
     setTimeout(() => { try { speechSynthesis.resume(); speechSynthesis.speak(u); } catch { if (done) done(); } }, 60);
   } catch { if (done) done(); /* synthèse indisponible */ }
 }
-function speak(text) { if (ttsOn) speakRaw(speakable(text)); }
+function speak(text, done) { if (ttsOn) speakRaw(speakable(text), done); }
 
 /* ---------- Voix : réglages ---------- */
 const SAMPLE = "Bonjour, je suis Jarvis. Voici ma voix.";
@@ -688,7 +689,18 @@ async function send(text, fromVoice) {
     addSources(payload.sources);
     addMemNote(payload.memory_changes);
     setUsage(payload.used, payload.limit, payload.searches_today, payload.search_limit);
-    speak(payload.reply);
+    // Conversation continue : après une question posée à la voix, Jarvis répond puis réécoute tout seul,
+    // jusqu'à un mot de fin (« merci », « c'est tout »…), deux silences d'affilée, ou un appui sur le micro.
+    if (fromVoice && convoOn && ttsOn && SR && !CONVO_END_RE.test(text)) {
+      convoActive = true; convoUntil = Date.now() + 90000;
+      speak(payload.reply, () => {
+        wakeHold = Date.now() + 1500;
+        setTimeout(() => { if (convoActive) startListening(); }, 300);
+      });
+    } else {
+      endConvo();
+      speak(payload.reply);
+    }
     if (!presenceEl.hidden) presenceCaption(payload.reply);
   } catch (e) {
     hideTyping();
@@ -705,10 +717,18 @@ async function send(text, fromVoice) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog = null, listening = false, heard = "";
 
+/* Conversation continue (état en mémoire seulement ; le réglage on/off est dans le menu) */
+let convoOn = store.get("jarvis.convo", "1") === "1";
+let convoActive = false, convoSilence = 0, convoUntil = 0;
+const CONVO_END_RE = /^(?:(?:ok|bon|bah|et|allez)\s+)?(?:merci(?:\s+(?:beaucoup|bien|jarvis|à toi))*|c'est (?:bon|tout)(?:\s+merci)?|ça (?:sera|ira) (?:tout|comme ça)|stop|arrête(?:-toi)?|ça suffit|laisse(?: tomber)?|à (?:plus|tout à l'heure|demain|bientôt)(?:\s+jarvis)?|bonne (?:nuit|soirée|journée)(?:\s+jarvis)?)[\s.!?,…]*$/i;
+function endConvo() { convoActive = false; convoSilence = 0; }
+function convoRunning() { return convoActive && Date.now() < convoUntil; }
+function stopListeningByUser() { endConvo(); if (listening && recog) recog.stop(); }
+
 function setupMic() {
   if (!SR) return;
   $("mic").hidden = false;
-  $("mic").addEventListener("click", () => { listening ? recog.stop() : startListening(); });
+  $("mic").addEventListener("click", () => { if (listening) stopListeningByUser(); else startListening(); });
 }
 function startListening() {
   if (busy) return;
@@ -725,14 +745,22 @@ function startListening() {
     if (!presenceEl.hidden) presenceCaption(heard);
   };
   recog.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") toast("Autorise le micro pour dicter.");
-    else if (e.error === "no-speech") toast("Je n'ai rien entendu.");
-    else if (e.error !== "aborted") toast("Dictée indisponible (" + e.error + ").");
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") { endConvo(); toast("Autorise le micro pour dicter."); }
+    else if (e.error === "no-speech") { if (!convoActive) toast("Je n'ai rien entendu."); }
+    else if (e.error !== "aborted") { endConvo(); toast("Dictée indisponible (" + e.error + ")."); }
     heard = "";
   };
   recog.onend = () => {
     listening = false; $("mic").classList.remove("on"); setOrb(null);
-    if (heard) { const t = heard; heard = ""; send(t, true); }
+    if (heard) { convoSilence = 0; const t = heard; heard = ""; send(t, true); }
+    else if (convoActive) {
+      // Silence pendant la conversation : on réécoute une fois, puis on referme sans bruit.
+      convoSilence++;
+      if (convoSilence < 2) {
+        convoUntil = Date.now() + 30000;
+        setTimeout(() => { if (convoActive && !busy && !listening) startListening(); }, 300);
+      } else endConvo();
+    }
   };
   try { recog.start(); } catch { toast("Impossible de démarrer le micro."); }
 }
@@ -788,7 +816,7 @@ function startWake() {
   try { wakeRec.start(); } catch { wakeActive = false; }
 }
 function wakeStep() {
-  if (!wakeOn || !SR || wakeActive || busy || listening || !session || document.hidden) return;
+  if (!wakeOn || !SR || wakeActive || busy || listening || convoRunning() || !session || document.hidden) return;
   if (Date.now() < wakeHold) return;
   try { if (speechSynthesis.speaking) return; } catch { /* rien */ }
   if (document.querySelector("dialog[open]")) return;
@@ -950,7 +978,7 @@ window.addEventListener("resize", () => { if (!presenceEl.hidden) avResize(); })
 $("m-presence").addEventListener("click", () => { openPresence(); presenceAuto = false; });
 $("p-close").addEventListener("click", closePresence);
 cv.addEventListener("click", stopSpeaking);
-$("p-mic").addEventListener("click", () => { if (listening) recog.stop(); else startListening(); });
+$("p-mic").addEventListener("click", () => { if (listening) stopListeningByUser(); else startListening(); });
 
 /* ---------- Mémoire ---------- */
 async function openMemory() {
@@ -1066,6 +1094,15 @@ $("m-wake").addEventListener("click", () => {
   else { wakeHeard = ""; try { if (wakeRec) wakeRec.abort(); } catch { /* rien */ } }
 });
 
+function applyConvo() { $("m-convo-state").textContent = convoOn ? "activée" : "désactivée"; }
+$("m-convo").addEventListener("click", () => {
+  convoOn = !convoOn; store.set("jarvis.convo", convoOn ? "1" : "0"); applyConvo();
+  if (!convoOn) endConvo();
+  toast(convoOn
+    ? "Après une question vocale, Jarvis répond puis réécoute. Dis « merci » ou « c'est tout » pour finir."
+    : "Conversation continue désactivée.");
+});
+
 function applyAuto() { $("m-auto-state").textContent = store.get("jarvis.autolisten", "0") === "1" ? "activé" : "désactivé"; }
 $("m-auto").addEventListener("click", () => {
   if (!SR) { toast("Dictée vocale non prise en charge ici."); return; }
@@ -1105,7 +1142,7 @@ sb.auth.onAuthStateChange((event, s) => {
   }
 });
 
-applyMode(); applyTts(); setupMic(); applyWake(); applyAuto(); if (wakeOn) setWakeLock(true);
+applyMode(); applyTts(); setupMic(); applyWake(); applyAuto(); applyConvo(); if (wakeOn) setWakeLock(true);
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
 }
