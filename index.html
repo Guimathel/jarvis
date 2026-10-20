@@ -830,6 +830,16 @@ function startListening() {
     heard = txt.trim();
     $("input").value = heard; autosize();
     if (!presenceEl.hidden) presenceCaption(heard);
+    clearTimeout(earlyTimer);
+    if (isQuickTv(heard)) {
+      const snap = heard;
+      earlyTimer = setTimeout(() => {
+        if (!listening || heard !== snap || busy) return;
+        const t = heard; heard = ""; earlyFired = true; convoSilence = 0;
+        try { recog.abort(); } catch { /* rien */ }
+        send(t, true);
+      }, EARLY_MS);
+    }
   };
   recog.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") { endConvo(); toast("Autorise le micro pour dicter."); }
@@ -839,6 +849,8 @@ function startListening() {
   };
   recog.onend = () => {
     listening = false; $("mic").classList.remove("on"); setOrb(null);
+    clearTimeout(earlyTimer);
+    if (earlyFired) { earlyFired = false; return; }
     if (heard) { convoSilence = 0; const t = heard; heard = ""; send(t, true); }
     else if (convoActive) {
       // Silence pendant la conversation : on réécoute une fois, puis on referme sans bruit.
@@ -851,6 +863,43 @@ function startListening() {
   };
   try { recog.start(); } catch { toast("Impossible de démarrer le micro."); }
 }
+
+/* Ordres TV simples : même liste que côté serveur, pour agir dès que la phrase est stable sans attendre la fin de l'écoute. */
+function normalizeSpeech(raw) {
+  return raw.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[’']/g, " ")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const QUICK_OBJ = "(?:(?:le |la |les )?(?:son|volume|tele|tv|television)(?: de la (?:tele|tv|television))?)";
+const QUICK_AMOUNT = "(?: (un peu|beaucoup|de (?:\\d+|un|deux|trois|quatre|cinq|six)(?: crans?)?))?";
+const QUICK_RULES = [
+  { action: "volume_up", re: new RegExp(`^(?:(?:monte|monter|augmente|augmenter|remonte|remonter) ${QUICK_OBJ}|mets? ${QUICK_OBJ} plus fort|(?:un peu )?plus fort|monte|monter)${QUICK_AMOUNT}(?: plus fort)?$`) },
+  { action: "volume_down", re: new RegExp(`^(?:(?:baisse|baisser|diminue|diminuer|descends|descendre|reduis|reduire) ${QUICK_OBJ}|mets? ${QUICK_OBJ} moins fort|(?:un peu )?moins fort|baisse)${QUICK_AMOUNT}(?: moins fort)?$`) },
+  { action: "mute", re: /^(?:(?:coupe|couper|mets?|mettre|remets?|desactive|active|reactive|enleve|retire) (?:le )?(?:son|sourdine|muet)(?: de la (?:tele|tv|television))?|mets? en sourdine|mute|sourdine)$/ },
+  { action: "off", re: /^(?:(?:eteins?|eteint|eteindre|coupe|couper|arrete|arreter|ferme|fermer) (?:la )?(?:tele|tv|television)|(?:tele|tv|television) (?:off|eteinte))$/ },
+  { action: "on", re: /^(?:(?:allume|allumer|rallume|rallumer|demarre|demarrer|mets?|remets?|mettre) (?:la )?(?:tele|tv|television)(?: en marche)?|(?:tele|tv|television) (?:on|allumee))$/ },
+  { action: "home", re: /^(?:(?:va|retourne|reviens|repars) (?:a |sur )?(?:l |la )?(?:accueil|page d accueil|ecran d accueil)|ecran d accueil|page d accueil|bouton accueil|touche accueil)$/ },
+];
+const QUICK_PRE = /^(?:hey |ok |dis |salut |eh |he |jarvis |peux tu |pourrais tu |tu peux |tu pourrais |veux tu |tu veux bien |s il te plait |stp |svp |allez |vas y |alors |bon )/;
+const QUICK_POST = / (?:s il te plait|stp|svp|please|maintenant|merci|jarvis)$/;
+
+function isQuickTv(raw) {
+  if (!raw || raw.length > 80) return false;
+  let t = normalizeSpeech(raw);
+  for (let i = 0; i < 6; i++) {
+    const next = t.replace(QUICK_PRE, "").replace(QUICK_POST, "").trim();
+    if (next === t) break;
+    t = next;
+  }
+  return QUICK_RULES.some((r) => r.re.test(t));
+}
+
+let earlyTimer = 0, earlyFired = false;
+const EARLY_MS = 450;   // la phrase doit rester identique ce temps-là pour partir sans attendre le silence
 
 /* ---------- Mode écoute « Hey Jarvis » ---------- */
 // Chrome écoute en boucle ; seule une phrase contenant « Jarvis » est envoyée à Claude.
@@ -892,6 +941,20 @@ function startWake() {
     let t = "";
     for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
     wakeHeard = t.trim();
+    clearTimeout(earlyTimer);
+    const wm = WAKE_RE.exec(wakeHeard);
+    if (wm) {
+      const rest = wakeHeard.slice(wm.index + wm[0].length).replace(/^[\s,.:;!?-]+/, "").trim();
+      if (isQuickTv(rest)) {
+        const snap = wakeHeard;
+        earlyTimer = setTimeout(() => {
+          if (!wakeActive || wakeHeard !== snap || busy) return;
+          const full = wakeHeard; wakeHeard = "";
+          try { wakeRec.abort(); } catch { /* rien */ }
+          handleWake(full);
+        }, EARLY_MS);
+      }
+    }
   };
   wakeRec.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
