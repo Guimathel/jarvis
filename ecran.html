@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F1418">
+<title>Écran maison</title>
+<style>
+:root{--bg:#0F1418;--card:#182027;--tile:#212C36;--tile-off:#151C22;--line:#3A4A57;--btn:#2A3844;--txt:#EAF0F3;--mute:#8FA1AD;--soft:#B3C0C9;--amber:#F2A154;--cyan:#5CC8D7;--green:#6FD39A;--red:#FF8A80}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}
+#app{height:100%;padding:max(12px,1.6vmin);display:grid;gap:max(10px,1.4vmin);grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+.card{background:var(--card);border-radius:22px;padding:max(12px,1.6vmin);min-height:0}
+.row{display:flex;align-items:center;gap:12px}
+h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
+.mute{color:var(--mute)}
+/* en-tête */
+#head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:max(10px,1.4vmin);align-items:stretch}
+#clock{font-size:clamp(40px,8vmin,72px);font-weight:800;line-height:1;letter-spacing:-.02em}
+#date{font-size:clamp(13px,2.1vmin,18px);color:var(--mute);margin-top:4px}
+#wx{display:flex;align-items:center;gap:16px;overflow:hidden}
+#wx .ico{font-size:clamp(34px,6vmin,54px);line-height:1}
+#wx .t{font-size:clamp(30px,5.4vmin,46px);font-weight:800;line-height:1}
+#wx .d{font-size:clamp(12px,1.9vmin,15px);color:var(--mute);margin-top:4px}
+#days{margin-left:auto;display:flex;gap:8px}
+.day{background:#1F2A33;border-radius:14px;padding:8px 12px;min-width:92px;font-size:clamp(12px,1.9vmin,15px)}
+.day b{display:block;font-size:clamp(13px,2.1vmin,16px)}
+#side{display:flex;flex-direction:column;gap:8px;min-width:170px}
+.pill{height:42px;border-radius:21px;border:1px solid var(--line);background:#1F2A33;font-weight:700;font-size:15px;padding:0 14px;display:flex;align-items:center;justify-content:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:5px;background:var(--green);display:inline-block}
+.dot.bad{background:var(--red)}
+/* corps */
+#main{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:max(10px,1.4vmin);min-height:0}
+#heat{display:flex;flex-direction:column;gap:10px}
+#rooms{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:8px}
+.room{background:var(--tile);border:1px solid var(--line);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:4px;min-height:0;min-width:0}
+.room.off{background:var(--tile-off);border-color:#26323B}
+.room.man{border-color:var(--amber)}
+.room .m{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);display:flex;justify-content:space-between}
+.room .n{font-size:clamp(12px,1.9vmin,15px);font-weight:700;line-height:1.2}
+.room .v{font-size:clamp(24px,4.6vmin,36px);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+.room .c{font-size:clamp(11px,1.8vmin,14px);color:var(--soft);font-weight:600}
+.room .b{margin-top:auto;display:flex;justify-content:space-between}
+.rb{width:clamp(38px,6vmin,48px);height:clamp(38px,6vmin,48px);border-radius:50%;border:1px solid var(--line);background:var(--btn);font-size:24px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.rb.up{background:var(--amber);border:none;color:#1A1208}
+#right{display:flex;flex-direction:column;gap:max(10px,1.4vmin);min-height:0}
+#tv{display:flex;flex-direction:column;gap:12px;flex:1}
+.chip{font-size:14px;font-weight:700;border-radius:14px;padding:6px 12px;background:#26323B;color:var(--soft)}
+.chip.on{background:#17382B;color:#8EE0B2}
+.circ{width:clamp(44px,7vmin,60px);height:clamp(44px,7vmin,60px);flex:0 0 auto;border-radius:50%;border:1px solid var(--line);background:var(--btn);display:flex;align-items:center;justify-content:center;padding:0;font-size:22px;font-weight:700}
+.circ.pw{border:none}
+.circ.pw.on{background:var(--cyan);color:#06242A}
+#bar{height:12px;border-radius:6px;background:var(--btn);overflow:hidden}
+#bar i{display:block;height:100%;background:var(--cyan);width:0}
+.apps{display:flex;gap:10px;margin-top:auto}
+.apps button{flex:1;height:clamp(44px,7vmin,56px);border-radius:16px;border:1px solid var(--line);background:#1F2A33;font-weight:700;font-size:15px}
+#foot{display:flex;gap:10px}
+.sc{flex:1;min-width:0;height:clamp(58px,9.5vmin,80px);border-radius:20px;border:2px solid var(--card);background:var(--card);padding:0 10px;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.sc b{font-size:clamp(15px,2.4vmin,18px)}
+.sc span{font-size:clamp(11px,1.8vmin,13px);color:var(--soft)}
+.sc.act{background:#243B46;border-color:var(--cyan)}
+.jv{flex:0 0 clamp(180px,22vw,260px);height:clamp(58px,9.5vmin,80px);border-radius:20px;border:none;background:var(--amber);color:#1A1208;font-weight:800;font-size:clamp(15px,2.4vmin,18px);display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none}
+/* veille / connexion / toast */
+#sleep{position:fixed;inset:0;z-index:20;background:#05080A;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#5E6E79;border:0;width:100%}
+#sleep.on{display:flex}
+#sleep .big{font-size:min(22vmin,130px);font-weight:800;color:#7C8C97;line-height:1}
+#toast{position:fixed;left:50%;bottom:max(14px,2vmin);transform:translateX(-50%);background:#2A3844;border:1px solid var(--line);border-radius:14px;padding:10px 18px;font-weight:600;z-index:30;display:none;max-width:90vw}
+#toast.bad{border-color:var(--red);color:#FFD2CE}
+#login{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
+#login a{background:var(--amber);color:#1A1208;font-weight:800;border-radius:16px;padding:14px 22px;text-decoration:none}
+/* portrait */
+@media (orientation:portrait){
+  #head{grid-template-columns:auto minmax(0,1fr)}
+  #side{grid-column:1 / -1;flex-direction:row}
+  #side .pill{flex:1}
+  #days{display:none}
+  #main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1.5fr) minmax(0,1fr)}
+  #rooms{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .room{flex-direction:row;align-items:center;gap:8px}
+  .room .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .room .b{margin:0;gap:6px}
+  #foot{flex-wrap:wrap}
+  .jv{flex:1 1 100%}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="head">
+    <div><div id="clock">--:--</div><div id="date"></div></div>
+    <div class="card" id="wx"><div class="ico" id="wico">…</div>
+      <div><div class="t" id="wtemp">--°</div><div class="d" id="wdesc">Météo en cours de chargement</div></div>
+      <div id="days"></div>
+    </div>
+    <div id="side">
+      <button class="pill" id="season">Mode hiver</button>
+      <div class="pill" style="border-color:transparent;background:var(--card)" id="relay"><span class="dot bad" id="rdot"></span><span id="rtxt">Relais ?</span></div>
+      <button class="pill" id="sleepbtn" aria-label="Mettre l'écran en veille">🌙 Veille</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="card" id="heat">
+      <div class="row" style="justify-content:space-between"><h2>Radiateurs</h2><span class="mute" id="hsum" style="font-size:14px;font-weight:600"></span></div>
+      <div id="rooms"></div>
+    </section>
+    <div id="right">
+      <section class="card" id="tv">
+        <div class="row" style="justify-content:space-between"><h2>Télévision</h2><span class="chip" id="tvchip">…</span></div>
+        <div class="row">
+          <button class="circ pw" id="tvpw" aria-label="Allumer ou éteindre la télévision">⏻</button>
+          <button class="circ" id="vdn" aria-label="Baisser le volume">−</button>
+          <div style="flex:1;min-width:0"><div id="bar"><i></i></div><div class="mute" id="vtxt" style="font-size:14px;margin-top:6px;font-weight:600"></div></div>
+          <button class="circ" id="vup" aria-label="Monter le volume">+</button>
+          <button class="circ" id="vmu" aria-label="Couper ou remettre le son">🔇</button>
+        </div>
+        <div class="apps"><button id="ahome">Accueil</button><button id="aibo">IBO Player</button></div>
+      </section>
+    </div>
+  </main>
+
+  <footer id="foot">
+    <button class="sc" id="s-confort"><b>Confort</b><span>21° · 22°</span></button>
+    <button class="sc" id="s-nuit"><b>Nuit</b><span>17° · 19°</span></button>
+    <button class="sc" id="s-absent"><b>Je pars</b><span>Chauffage réduit</span></button>
+    <button class="sc" id="s-back"><b>Je rentre</b><span>Remet comme avant</span></button>
+    <a class="jv" href="index.html">🎤 Parler à Jarvis</a>
+  </footer>
+</div>
+
+<button id="sleep" aria-label="Réveiller l'écran"><div class="big" id="sclock">--:--</div><div style="font-size:clamp(16px,3vmin,24px);font-weight:600">Touche l'écran pour le réveiller</div></button>
+<div id="toast" role="status"></div>
+<div id="login"><h2>Connexion nécessaire</h2><div class="mute">Connecte-toi d'abord dans Jarvis, puis reviens ici.</div><a href="index.html">Ouvrir Jarvis</a></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+"use strict";
+const CONFIG = {
+  SUPABASE_URL: "https://qcmfubynjidftonhrldt.supabase.co",
+  SUPABASE_KEY: "sb_publishable_M9MRnq1rsD7WQ5Ors-8BOg_DVqandAa",
+  LAT: 47.71, LON: 6.95,            // Rougemont-le-Château (approx.)
+  SLEEP_FROM: "23:00", SLEEP_TO: "06:30",
+  WAKE_SECONDS: 60,                 // après un toucher de nuit, l'écran se rendort au bout de ce délai
+  STATE_POLL_MS: 5000, STALE_SECONDS: 180,
+};
+const $ = (id) => document.getElementById(id);
+const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+});
+
+/* ---------- Aides ---------- */
+const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(".", ","));
+let toastTimer;
+function toast(msg, bad) {
+  const t = $("toast"); t.textContent = msg; t.className = bad ? "bad" : ""; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), bad ? 6000 : 2500);
+}
+const mins = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+function inSleepWindow(d = new Date()) {
+  const n = d.getHours() * 60 + d.getMinutes(), a = mins(CONFIG.SLEEP_FROM), b = mins(CONFIG.SLEEP_TO);
+  return a > b ? (n >= a || n < b) : (n >= a && n < b);
+}
+
+/* ---------- Horloge ---------- */
+function tick() {
+  const d = new Date();
+  const hm = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  $("clock").textContent = hm; $("sclock").textContent = hm;
+  const s = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  $("date").textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  checkSleep();
+}
+
+/* ---------- Veille ---------- */
+let manualSleep = false, wakeUntil = 0;
+function setSleep(on) { $("sleep").classList.toggle("on", on); }
+function checkSleep() {
+  const night = inSleepWindow() && Date.now() > wakeUntil;
+  setSleep(manualSleep || night);
+}
+$("sleepbtn").onclick = () => { manualSleep = true; checkSleep(); };
+$("sleep").onclick = () => {
+  manualSleep = false;
+  if (inSleepWindow()) wakeUntil = Date.now() + CONFIG.WAKE_SECONDS * 1000;
+  checkSleep();
+};
+document.addEventListener("pointerdown", () => { if (inSleepWindow() && Date.now() < wakeUntil) wakeUntil = Date.now() + CONFIG.WAKE_SECONDS * 1000; }, true);
+let lock = null;
+async function keepAwake() {
+  try { if ("wakeLock" in navigator && document.visibilityState === "visible") lock = await navigator.wakeLock.request("screen"); } catch { /* refusé */ }
+}
+document.addEventListener("visibilitychange", keepAwake);
+
+/* ---------- Météo (Open-Meteo, sans clé) ---------- */
+const WX = (c) => c === 0 ? ["☀️", "Ciel dégagé"] : c <= 2 ? ["🌤️", "Éclaircies"] : c === 3 ? ["☁️", "Couvert"]
+  : c <= 48 ? ["🌫️", "Brouillard"] : c <= 57 ? ["🌦️", "Bruine"] : c <= 67 ? ["🌧️", "Pluie"] : c <= 77 ? ["🌨️", "Neige"]
+  : c <= 82 ? ["🌦️", "Averses"] : c <= 86 ? ["🌨️", "Averses de neige"] : ["⛈️", "Orage"];
+async function weather() {
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.LAT}&longitude=${CONFIG.LON}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FParis&forecast_days=4`;
+    const j = await (await fetch(u)).json();
+    const c = j.current, [ico, desc] = WX(c.weather_code);
+    $("wico").textContent = ico; $("wtemp").textContent = Math.round(c.temperature_2m) + "°";
+    $("wdesc").textContent = `${desc} · ressenti ${Math.round(c.apparent_temperature)}° · vent ${Math.round(c.wind_speed_10m)} km/h`;
+    $("days").innerHTML = [1, 2, 3].map((i) => {
+      const name = new Date(j.daily.time[i] + "T12:00").toLocaleDateString("fr-FR", { weekday: "long" });
+      return `<div class="day"><b>${name.charAt(0).toUpperCase() + name.slice(1)}</b>${Math.round(j.daily.temperature_2m_max[i])}° / ${Math.round(j.daily.temperature_2m_min[i])}°<br><span class="mute">${WX(j.daily.weather_code[i])[1]}</span></div>`;
+    }).join("");
+  } catch { $("wdesc").textContent = "Météo indisponible"; }
+}
+
+/* ---------- Ordres (passent par la fonction SQL panel_command) ---------- */
+async function track(id) {
+  for (let i = 0; i < 18; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const { data } = await sb.from("home_commands").select("status,result").eq("id", id).maybeSingle();
+    if (!data) continue;
+    if (data.status === "failed") { toast("Échec : " + (data.result || "erreur"), true); return; }
+    if (data.status === "done") { setTimeout(fetchState, 2500); return; }
+  }
+}
+async function cmd(args, okMsg) {
+  const { data, error } = await sb.rpc("panel_command", args);
+  if (error) { toast(error.message.replace(/^.*?:\s*/, ""), true); return false; }
+  if (okMsg) toast(okMsg);
+  track(data); return true;
+}
+
+/* ---------- État de la maison ---------- */
+let st = null, stAt = 0, lastKey = "";
+const pend = new Map();   // pièce -> { target, timer, until }
+async function fetchState() {
+  const { data: s } = await sb.auth.getSession();
+  if (!s.session) { $("login").style.display = "flex"; return; }
+  $("login").style.display = "none";
+  const { data, error } = await sb.from("home_state").select("data,updated_at").eq("id", 1).maybeSingle();
+  if (error || !data) { st = null; render(); return; }
+  st = data.data; stAt = new Date(data.updated_at).getTime();
+  render();
+}
+const MODE = { auto: "Prog.", manual: "Manuel", off: "Éteint", modified_auto: "Prog. modif." };
+function roomView(r) {
+  const p = pend.get(r.name);
+  const target = p && Date.now() < p.until ? p.target : r.target;
+  const mode = p && Date.now() < p.until ? "manual" : r.mode;
+  return { ...r, target, mode };
+}
+function render() {
+  const fresh = st && Date.now() - stAt < CONFIG.STALE_SECONDS * 1000;
+  $("rdot").className = "dot" + (fresh ? "" : " bad");
+  $("rtxt").textContent = fresh ? "Relais en ligne" : "Relais hors ligne";
+  const ete = st?.season === "ete";
+  $("season").textContent = ete ? "☀️ Mode été" : "❄️ Mode hiver";
+  $("hsum").textContent = ete ? "Mode été · tout éteint" : "Mode hiver";
+  const rooms = (st?.rooms || []).map(roomView);
+  const key = JSON.stringify([rooms, st?.tv, st?.scene, ete, fresh]);
+  if (key === lastKey) return; lastKey = key;
+  const box = $("rooms");
+  box.innerHTML = "";
+  rooms.forEach((r) => {
+    const off = r.mode === "off";
+    const d = document.createElement("div");
+    d.className = "room" + (off ? " off" : r.mode === "manual" ? " man" : "");
+    const now = r.now == null ? "--" : fmt(r.now) + "°";
+    d.innerHTML = `<div class="col"><div class="m"><span>${MODE[r.mode] || r.mode}</span><span>${r.active ? "🔥" : ""}</span></div>
+      <div class="n"></div><div class="v">${now}</div>
+      <div class="c">${off ? "Éteint" : "Consigne " + (r.target == null ? "--" : fmt(r.target)) + "°"}</div></div>
+      <div class="b"><button class="rb" aria-label="Baisser">−</button><button class="rb up" aria-label="Monter">+</button></div>`;
+    d.querySelector(".n").textContent = r.name;
+    const [dn, up] = d.querySelectorAll(".rb");
+    dn.disabled = up.disabled = ete || !fresh;
+    dn.onclick = () => adjust(r, -0.5); up.onclick = () => adjust(r, 0.5);
+    box.appendChild(d);
+  });
+  const tv = st?.tv || {};
+  $("tvchip").textContent = tv.on === true ? "Allumée" : tv.on === false ? "En veille" : "Inconnu";
+  $("tvchip").className = "chip" + (tv.on ? " on" : "");
+  $("tvpw").className = "circ pw" + (tv.on ? " on" : "");
+  const v = tv.volume;
+  $("bar").firstElementChild.style.width = v && !v.muted ? Math.round((v.level / (v.max || 100)) * 100) + "%" : "0";
+  $("vtxt").textContent = !v ? "" : v.muted ? "Son coupé" : `Volume ${v.level} sur ${v.max}`;
+  ["confort", "nuit", "absent"].forEach((k) => $("s-" + k).classList.toggle("act", st?.scene === k));
+  document.querySelectorAll("#foot .sc, #tv button").forEach((b) => (b.disabled = !fresh));
+}
+function adjust(r, step) {
+  const base = r.mode === "off" ? (r.now ? Math.round(r.now * 2) / 2 : 19) : r.target;
+  const target = Math.min(25, Math.max(7, base + step));
+  const p = pend.get(r.name) || {};
+  clearTimeout(p.timer);
+  pend.set(r.name, {
+    target, until: Date.now() + 20000,
+    timer: setTimeout(() => cmd({ p_action: "heat", p_op: "set", p_room: r.name, p_temp: target }), 1200),
+  });
+  lastKey = ""; render();
+}
+
+/* ---------- Boutons ---------- */
+const act = (id, args, msg) => ($(id).onclick = () => cmd(args, msg));
+$("tvpw").onclick = () => cmd({ p_action: st?.tv?.on ? "off" : "on" }, st?.tv?.on ? "Extinction…" : "Allumage…");
+act("vup", { p_action: "volume_up", p_amount: 1 });
+act("vdn", { p_action: "volume_down", p_amount: 1 });
+act("vmu", { p_action: "mute" });
+act("ahome", { p_action: "home" });
+act("aibo", { p_action: "app", p_name: "ibo" }, "IBO Player…");
+act("s-confort", { p_action: "heat", p_op: "scene", p_name: "confort" }, "Scène Confort…");
+act("s-nuit", { p_action: "heat", p_op: "scene", p_name: "nuit" }, "Scène Nuit…");
+act("s-absent", { p_action: "heat", p_op: "scene", p_name: "absent" }, "Chauffage réduit…");
+act("s-back", { p_action: "heat", p_op: "restore", p_name: "absent" }, "Retour à l'état d'avant…");
+$("season").onclick = () => {
+  const ete = st?.season === "ete";
+  if (!ete && !confirm("Passer en mode été : tous les radiateurs seront éteints. Continuer ?")) return;
+  cmd({ p_action: "heat", p_op: "season", p_name: ete ? "hiver" : "ete" });
+};
+
+/* ---------- Démarrage ---------- */
+tick(); setInterval(tick, 10000);
+weather(); setInterval(weather, 15 * 60 * 1000);
+fetchState(); setInterval(fetchState, CONFIG.STATE_POLL_MS);
+keepAwake();
+sb.auth.onAuthStateChange(() => fetchState());
+if ("serviceWorker" in navigator) { /* l'écran n'a pas besoin de mode hors ligne */ }
+</script>
+</body>
+</html>
