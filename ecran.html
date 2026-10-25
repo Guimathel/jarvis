@@ -97,6 +97,7 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 .cal button.hasr::after{content:"";position:absolute;bottom:5px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--cyan)}
 .cal button.sel.hasr::after{background:#1A1208}
 .rl{display:flex;flex-direction:column;gap:6px}
+.gifbox{display:flex;justify-content:center;align-items:center;gap:12px;margin:8px 0;flex-wrap:wrap}.gifbox img{max-height:210px;max-width:100%;border-radius:14px}.gifbox .em{font-size:92px;line-height:1}.gifbox.sm{margin:0}.gifbox.sm img{width:46px;height:46px;max-height:none;border-radius:10px;object-fit:cover}.gifbox.sm .em{font-size:30px}
 .ri{display:flex;align-items:center;gap:10px;background:#1F2A33;border-radius:12px;padding:8px 12px;font-size:16px}
 .ri .t{flex:1;min-width:0}.ri .w{font-size:12px;font-weight:800;color:var(--mute);text-transform:uppercase}
 .ri button{width:40px;height:40px;border-radius:50%;font-size:16px;padding:0;border:1px solid var(--line);background:var(--btn)}
@@ -184,7 +185,7 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
     <input type="time" id="agtime" aria-label="Heure"><select id="agrep" aria-label="Répétition"><option value="day">Ce jour</option><option value="all">Tous les jours</option><option value="year">Chaque année</option></select>
     <button class="pri" id="agadd">Ajouter</button></div>
   <button id="agclose">Fermer</button></div></div>
-<div id="alert"><div class="dlg" role="alertdialog" aria-label="Rappel"><h2 id="alh">Rappel</h2><p id="altxt" style="font-size:26px"></p><button class="pri" id="alok">OK</button></div></div>
+<div id="alert"><div class="dlg" role="alertdialog" aria-label="Rappel"><h2 id="alh">Rappel</h2><div id="algif" class="gifbox"></div><p id="altxt" style="font-size:26px"></p><button class="pri" id="alok">OK</button></div></div>
 <div id="toast" role="status"></div>
 <div id="login"><h2>Connexion nécessaire</h2><div class="mute">Connecte-toi d'abord dans Jarvis, puis reviens ici.</div><a href="index.html">Ouvrir Jarvis</a></div>
 
@@ -397,6 +398,33 @@ $("m-music").onclick = async () => {
   catch { toast("Jarvis n'a pas répondu pour la musique.", true); }
 };
 
+/* ---------- Animations selon l'événement : mets tes GIF dans le dossier gifs/ (nom = champ f + .gif) ---------- */
+const GIFS = [
+  { f: "anniversaire", e: "🎂", k: ["anniversaire", "anniv", "joyeux anniversaire"] },
+  { f: "sage-femme", e: "🤰", k: ["sage-femme", "sage femme", "sagefemme"] },
+  { f: "dentiste", e: "🦷", k: ["dentiste"] },
+  { f: "medecin", e: "🩺", k: ["medecin", "docteur", "generaliste", "pediatre", "ophtalmo", "kine", "kinesitherapeute", "radio", "analyse", "prise de sang"] },
+  { f: "coiffeur", e: "💇", k: ["coiffeur", "coiffeuse", "coiffure"] },
+  { f: "vacances", e: "🏖️", k: ["vacances", "conges", "week-end", "weekend"] },
+  { f: "soiree", e: "🎉", k: ["soiree", "famille", "parents", "amis", "diner", "apero", "barbecue", "repas", "fete"] },
+];
+const normT = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const GIFRE = GIFS.map((g) => ({ g, re: new RegExp("(^|[^a-z0-9])(" + g.k.map((k) => normT(k).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")([^a-z0-9]|$)") }));
+function gifFor(text) { const t = normT(text || ""); const m = GIFRE.find((x) => x.re.test(t)); return m ? m.g : null; }
+// Variantes : f.gif, f2.gif … f6.gif ; on repère celles qui existent au démarrage et on en tire une au hasard.
+GIFS.forEach((g) => {
+  g.files = [];
+  for (let i = 1; i <= 6; i++) { const n = g.f + (i === 1 ? "" : i) + ".gif", im = new Image(); im.onload = () => g.files.push(n); im.src = "gifs/" + n; }
+});
+function gifEl(g, small) {
+  const box = document.createElement("div"); box.className = "gifbox" + (small ? " sm" : "");
+  const emoji = () => { const sp = document.createElement("span"); sp.className = "em"; sp.textContent = g.e; return sp; };
+  if (!g.files.length) { box.appendChild(emoji()); return box; }
+  const img = document.createElement("img"); img.alt = ""; img.src = "gifs/" + g.files[Math.floor(Math.random() * g.files.length)];
+  img.onerror = () => img.replaceWith(emoji());
+  box.appendChild(img); return box;
+}
+
 /* ---------- Bonjour : chauffage + météo + rappels du jour ---------- */
 let briefTimer;
 function closeBrief() { $("brief").classList.remove("on"); clearTimeout(briefTimer); try { speechSynthesis.cancel(); } catch { /* rien */ } }
@@ -415,6 +443,8 @@ async function briefing() {
   const box = $("bb"); box.innerHTML = "";
   const add = (cls, txt) => { const e = document.createElement(cls === "who" ? "div" : "p"); if (cls === "who") e.className = "who"; e.textContent = txt; box.appendChild(e); };
   if (WXNOW) add("p", parts[0]);
+  const seen = new Set();
+  rap.forEach((r) => { const g = gifFor(r.texte); if (g && !seen.has(g.f) && seen.size < 3) { seen.add(g.f); box.appendChild(gifEl(g, false)); } });
   add("who", "Guillaume"); (g.length ? g : ["Aucun rappel."]).forEach((t) => add("p", t));
   add("who", "Marion"); (m.length ? m : ["Aucun rappel."]).forEach((t) => add("p", t));
   $("bh").textContent = d.getHours() < 12 ? "Bonjour" : "Bonjour, voici ta journée";
@@ -463,6 +493,7 @@ function agRender() {
   if (!day.length) { const e = document.createElement("div"); e.className = "mute"; e.textContent = "Rien de prévu ce jour."; box.appendChild(e); }
   day.forEach((r) => {
     const e = document.createElement("div"); e.className = "ri";
+    const gg = gifFor(r.texte); if (gg) e.appendChild(gifEl(gg, true));
     const t = document.createElement("div"); t.className = "t";
     const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.ext ? " · iPhone" : r.jour === null ? " · tous les jours" : r.repete === "annuel" ? " · chaque année" : "") + (r.heure ? " · " + r.heure.slice(0, 5) : "");
     const x = document.createElement("div"); x.textContent = r.texte + (r.lieu ? " (" + r.lieu + ")" : "");
@@ -506,6 +537,7 @@ function checkAlerts() {
   due.forEach((r) => alertShown.add(r.id));
   try { localStorage.setItem("alerts-" + iso, JSON.stringify([...alertShown])); } catch { /* rien */ }
   $("alh").textContent = "Rappel · " + hm;
+  $("algif").innerHTML = ""; const ag1 = due.map((r) => gifFor(r.texte)).find(Boolean); if (ag1) $("algif").appendChild(gifEl(ag1, false));
   $("altxt").textContent = due.map((r) => (r.qui === "tous" ? "" : NOMS[r.qui] + " : ") + r.texte).join(" — ");
   manualSleep = false; wakeUntil = Date.now() + 120000; checkSleep();
   $("alert").classList.add("on"); beep();
