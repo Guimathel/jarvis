@@ -97,6 +97,12 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 .cal button.hasr::after{content:"";position:absolute;bottom:5px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--cyan)}
 .cal button.sel.hasr::after{background:#1A1208}
 .rl{display:flex;flex-direction:column;gap:6px}
+#today{grid-column:1/-1;display:none;gap:10px;align-items:center;overflow-x:auto;scrollbar-width:none}
+#today.on{display:flex}
+.tdi{flex:0 0 auto;display:flex;align-items:center;gap:10px;background:var(--card);border:2px solid var(--amber);border-radius:18px;padding:6px 16px 6px 8px;font-weight:700;font-size:clamp(15px,2.5vmin,21px);white-space:nowrap}
+.tdi.past{opacity:.5;border-color:var(--line)}
+.tdi .h{color:var(--amber)}.tdi .q{font-size:.7em;color:var(--mute);text-transform:uppercase}
+.tdi .gifbox.sm .em{font-size:28px}
 .gifbox{display:flex;justify-content:center;align-items:center;gap:12px;margin:8px 0;flex-wrap:wrap}.gifbox img{max-height:210px;max-width:100%;border-radius:14px}.gifbox .em{font-size:92px;line-height:1}.gifbox.sm{margin:0}.gifbox.sm img{width:46px;height:46px;max-height:none;border-radius:10px;object-fit:cover}.gifbox.sm .em{font-size:30px}
 .ri{display:flex;align-items:center;gap:10px;background:#1F2A33;border-radius:12px;padding:8px 12px;font-size:16px}
 .ri .t{flex:1;min-width:0}.ri .w{font-size:12px;font-weight:800;color:var(--mute);text-transform:uppercase}
@@ -111,6 +117,7 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
   #side{grid-column:1 / -1;flex-direction:row}
   #side .pill{flex:1}
   #days{display:none}
+  #today{flex-wrap:wrap;overflow:visible}
   #main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
   #tv{flex:none}
   .room .v{font-size:clamp(22px,3.6vmin,30px)}
@@ -138,6 +145,7 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
       <div class="pill" style="border-color:transparent;background:var(--card)" id="relay"><span class="dot bad" id="rdot"></span><span id="rtxt">Relais ?</span></div>
       <button class="pill" id="sleepbtn" aria-label="Mettre l'écran en veille">🌙 Veille</button>
     </div>
+    <div id="today" aria-label="Aujourd'hui"></div>
   </header>
 
   <main id="main">
@@ -471,7 +479,7 @@ async function agLoad() {
   if (error) toast("Agenda illisible : " + error.message, true);
   const ic = await sb.from("agenda_icloud").select("id,qui,jour,heure,texte,lieu").gte("jour", f).lte("jour", l);
   const ext = (ic.data || []).map((r) => ({ ...r, ext: true }));
-  ag.rows = [...(data || []), ...ext].sort((a, b) => (a.heure || "").localeCompare(b.heure || "")); agRender();
+  ag.rows = [...(data || []), ...ext].sort((a, b) => (a.heure || "").localeCompare(b.heure || "")); agRender(); loadTodayAll();
 }
 function agRender() {
   const first = new Date(ag.y, ag.m, 1), today = isoD(new Date());
@@ -524,6 +532,34 @@ async function loadToday() {
   const { data } = await sb.from("rappels").select("id,qui,jour,heure,texte,repete").eq("fait", false).not("heure", "is", null).or(`jour.eq.${iso},jour.is.null,repete.eq.annuel`);
   todayRows = (data || []).filter((r) => r.jour === null || onDay(r, iso));
 }
+/* ---------- Bandeau « Aujourd'hui » : rendez-vous et rappels datés du jour ---------- */
+let todayAll = [];
+async function loadTodayAll() {
+  const iso = isoD(new Date());
+  const [a, b] = await Promise.all([
+    sb.from("rappels").select("id,qui,jour,heure,texte,repete").eq("fait", false).or(`jour.eq.${iso},repete.eq.annuel`),
+    sb.from("agenda_icloud").select("qui,heure,texte").eq("jour", iso),
+  ]);
+  todayAll = [...(a.data || []).filter((r) => r.jour !== null && onDay(r, iso)), ...(b.data || [])]
+    .sort((x, y) => (x.heure || "").localeCompare(y.heure || ""));
+  renderToday();
+}
+function renderToday() {
+  const box = $("today"), d = new Date(), nowM = d.getHours() * 60 + d.getMinutes();
+  const mins = (h) => (h ? Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5)) : null);
+  const items = todayAll.filter((r) => r.heure === null || mins(r.heure) >= nowM - 120);
+  box.innerHTML = "";
+  items.forEach((r) => {
+    const e = document.createElement("div"), m = mins(r.heure);
+    e.className = "tdi" + (m !== null && m < nowM ? " past" : "");
+    const g = gifFor(r.texte); if (g) e.appendChild(gifEl(g, true));
+    if (r.heure) { const h = document.createElement("span"); h.className = "h"; h.textContent = r.heure.slice(0, 5); e.appendChild(h); }
+    const t = document.createElement("span"); t.textContent = r.texte; e.appendChild(t);
+    if (r.qui !== "tous") { const q = document.createElement("span"); q.className = "q"; q.textContent = NOMS[r.qui] || ""; e.appendChild(q); }
+    box.appendChild(e);
+  });
+  box.classList.toggle("on", items.length > 0);
+}
 function beep() {
   try {
     const c = new (window.AudioContext || window.webkitAudioContext)();
@@ -548,7 +584,7 @@ $("alok").onclick = () => $("alert").classList.remove("on");
 tick(); setInterval(tick, 10000);
 weather(); setInterval(weather, 15 * 60 * 1000);
 fetchState(); setInterval(fetchState, CONFIG.STATE_POLL_MS);
-loadToday(); setInterval(loadToday, 120000); setInterval(checkAlerts, 15000);
+loadToday(); setInterval(loadToday, 120000); loadTodayAll(); setInterval(loadTodayAll, 120000); setInterval(renderToday, 60000); setInterval(checkAlerts, 15000);
 keepAwake();
 sb.auth.onAuthStateChange(() => fetchState());
 if ("serviceWorker" in navigator) { /* l'écran n'a pas besoin de mode hors ligne */ }
