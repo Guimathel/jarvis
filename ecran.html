@@ -408,6 +408,8 @@ async function briefing() {
   if (WXNOW) parts.push(`Il fait ${WXNOW.temp} degrés, ${WXNOW.desc}. Aujourd'hui entre ${WXNOW.min} et ${WXNOW.max} degrés.`);
   const { data } = await sb.from("rappels").select("qui,texte,heure,jour,repete").eq("fait", false).or(`jour.eq.${iso},jour.is.null,repete.eq.annuel`).order("heure", { nullsFirst: true });
   rap = (data || []).filter((r) => r.jour === null || onDay(r, iso));
+  const ic = await sb.from("agenda_icloud").select("qui,heure,texte").eq("jour", iso).order("heure", { nullsFirst: true });
+  rap = [...rap, ...(ic.data || [])];
   const by = (q) => rap.filter((r) => r.qui === q || r.qui === "tous").map((r) => (r.heure ? r.heure.slice(0, 5) + " : " : "") + r.texte);
   const g = by("guillaume"), m = by("marion");
   const box = $("bb"); box.innerHTML = "";
@@ -437,7 +439,9 @@ async function agLoad() {
   const f = isoD(new Date(ag.y, ag.m, 1)), l = isoD(new Date(ag.y, ag.m + 1, 0));
   const { data, error } = await sb.from("rappels").select("id,qui,jour,heure,texte,repete").eq("fait", false).or(`jour.is.null,repete.eq.annuel,and(jour.gte.${f},jour.lte.${l})`).order("heure", { nullsFirst: true });
   if (error) toast("Agenda illisible : " + error.message, true);
-  ag.rows = data || []; agRender();
+  const ic = await sb.from("agenda_icloud").select("id,qui,jour,heure,texte,lieu").gte("jour", f).lte("jour", l);
+  const ext = (ic.data || []).map((r) => ({ ...r, ext: true }));
+  ag.rows = [...(data || []), ...ext].sort((a, b) => (a.heure || "").localeCompare(b.heure || "")); agRender();
 }
 function agRender() {
   const first = new Date(ag.y, ag.m, 1), today = isoD(new Date());
@@ -460,9 +464,10 @@ function agRender() {
   day.forEach((r) => {
     const e = document.createElement("div"); e.className = "ri";
     const t = document.createElement("div"); t.className = "t";
-    const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.jour === null ? " · tous les jours" : r.repete === "annuel" ? " · chaque année" : "") + (r.heure ? " · " + r.heure : "");
-    const x = document.createElement("div"); x.textContent = r.texte;
+    const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.ext ? " · iPhone" : r.jour === null ? " · tous les jours" : r.repete === "annuel" ? " · chaque année" : "") + (r.heure ? " · " + r.heure.slice(0, 5) : "");
+    const x = document.createElement("div"); x.textContent = r.texte + (r.lieu ? " (" + r.lieu + ")" : "");
     t.append(w, x);
+    if (r.ext) { e.append(t); box.appendChild(e); return; }
     const del = document.createElement("button"); del.textContent = "✕"; del.setAttribute("aria-label", "Supprimer");
     del.onclick = async () => { const { error } = await sb.from("rappels").delete().eq("id", r.id); if (error) toast(error.message, true); else agLoad(); };
     e.append(t, del); box.appendChild(e);
