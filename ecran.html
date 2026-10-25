@@ -74,8 +74,9 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 #toast.bad{border-color:var(--red);color:#FFD2CE}
 #login{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
 #login a{background:var(--amber);color:#1A1208;font-weight:800;border-radius:16px;padding:14px 22px;text-decoration:none}
-#modal,#brief{position:fixed;inset:0;z-index:25;background:rgba(5,8,10,.8);display:none;align-items:center;justify-content:center;padding:20px}
-#modal.on,#brief.on{display:flex}
+#modal,#brief,#alert{position:fixed;inset:0;z-index:25;background:rgba(5,8,10,.8);display:none;align-items:center;justify-content:center;padding:20px}
+#modal.on,#brief.on,#alert.on{display:flex}
+#alert{z-index:28}
 .dlg{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:24px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:14px}
 .dlg h2{font-size:24px}
 .dlg button{height:64px;border-radius:18px;border:1px solid var(--line);background:#1F2A33;font-weight:800;font-size:18px}
@@ -180,9 +181,10 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
   <div class="rl" id="agrows"></div>
   <div class="addf"><select id="agwho" aria-label="Pour qui"><option value="tous">Tous</option><option value="guillaume">Guillaume</option><option value="marion">Marion</option></select>
     <input type="text" id="agtxt" maxlength="200" placeholder="Nouveau rappel" aria-label="Texte du rappel">
-    <input type="time" id="agtime" aria-label="Heure"><select id="agrep" aria-label="Répétition"><option value="day">Ce jour</option><option value="all">Tous les jours</option></select>
+    <input type="time" id="agtime" aria-label="Heure"><select id="agrep" aria-label="Répétition"><option value="day">Ce jour</option><option value="all">Tous les jours</option><option value="year">Chaque année</option></select>
     <button class="pri" id="agadd">Ajouter</button></div>
   <button id="agclose">Fermer</button></div></div>
+<div id="alert"><div class="dlg" role="alertdialog" aria-label="Rappel"><h2 id="alh">Rappel</h2><p id="altxt" style="font-size:26px"></p><button class="pri" id="alok">OK</button></div></div>
 <div id="toast" role="status"></div>
 <div id="login"><h2>Connexion nécessaire</h2><div class="mute">Connecte-toi d'abord dans Jarvis, puis reviens ici.</div><a href="index.html">Ouvrir Jarvis</a></div>
 
@@ -404,8 +406,8 @@ async function briefing() {
   const d = new Date(), iso = d.toLocaleDateString("sv-SE");
   let parts = [], rap = [];
   if (WXNOW) parts.push(`Il fait ${WXNOW.temp} degrés, ${WXNOW.desc}. Aujourd'hui entre ${WXNOW.min} et ${WXNOW.max} degrés.`);
-  const { data } = await sb.from("rappels").select("qui,texte,heure").eq("fait", false).or(`jour.eq.${iso},jour.is.null`).order("id");
-  rap = data || [];
+  const { data } = await sb.from("rappels").select("qui,texte,heure,jour,repete").eq("fait", false).or(`jour.eq.${iso},jour.is.null,repete.eq.annuel`).order("heure", { nullsFirst: true });
+  rap = (data || []).filter((r) => r.jour === null || onDay(r, iso));
   const by = (q) => rap.filter((r) => r.qui === q || r.qui === "tous").map((r) => (r.heure ? r.heure.slice(0, 5) + " : " : "") + r.texte);
   const g = by("guillaume"), m = by("marion");
   const box = $("bb"); box.innerHTML = "";
@@ -428,11 +430,12 @@ $("s-bonjour").onclick = async () => {
 
 /* ---------- Agenda ---------- */
 const isoD = (d) => d.toLocaleDateString("sv-SE");
+const onDay = (r, iso) => r.jour === iso || (r.repete === "annuel" && r.jour && r.jour.slice(5) === iso.slice(5));
 const NOMS = { guillaume: "Guillaume", marion: "Marion", tous: "Tous" };
 let ag = { y: 0, m: 0, sel: "", rows: [] };
 async function agLoad() {
   const f = isoD(new Date(ag.y, ag.m, 1)), l = isoD(new Date(ag.y, ag.m + 1, 0));
-  const { data, error } = await sb.from("rappels").select("id,qui,jour,heure,texte").eq("fait", false).or(`jour.is.null,and(jour.gte.${f},jour.lte.${l})`).order("heure", { nullsFirst: true });
+  const { data, error } = await sb.from("rappels").select("id,qui,jour,heure,texte,repete").eq("fait", false).or(`jour.is.null,repete.eq.annuel,and(jour.gte.${f},jour.lte.${l})`).order("heure", { nullsFirst: true });
   if (error) toast("Agenda illisible : " + error.message, true);
   ag.rows = data || []; agRender();
 }
@@ -446,18 +449,18 @@ function agRender() {
   for (let d = 1; d <= n; d++) {
     const iso = isoD(new Date(ag.y, ag.m, d)), b = document.createElement("button");
     b.textContent = d;
-    b.className = (iso === today ? "today " : "") + (iso === ag.sel ? "sel " : "") + (ag.rows.some((r) => r.jour === iso) ? "hasr" : "");
+    b.className = (iso === today ? "today " : "") + (iso === ag.sel ? "sel " : "") + (ag.rows.some((r) => r.jour !== null && onDay(r, iso)) ? "hasr" : "");
     b.onclick = () => { ag.sel = iso; agRender(); };
     cal.appendChild(b);
   }
   $("agday").textContent = new Date(ag.sel + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   const box = $("agrows"); box.innerHTML = "";
-  const day = ag.rows.filter((r) => r.jour === ag.sel || r.jour === null);
+  const day = ag.rows.filter((r) => r.jour === null || onDay(r, ag.sel));
   if (!day.length) { const e = document.createElement("div"); e.className = "mute"; e.textContent = "Rien de prévu ce jour."; box.appendChild(e); }
   day.forEach((r) => {
     const e = document.createElement("div"); e.className = "ri";
     const t = document.createElement("div"); t.className = "t";
-    const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.jour === null ? " · tous les jours" : "") + (r.heure ? " · " + r.heure : "");
+    const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.jour === null ? " · tous les jours" : r.repete === "annuel" ? " · chaque année" : "") + (r.heure ? " · " + r.heure : "");
     const x = document.createElement("div"); x.textContent = r.texte;
     t.append(w, x);
     const del = document.createElement("button"); del.textContent = "✕"; del.setAttribute("aria-label", "Supprimer");
@@ -472,15 +475,43 @@ $("agprev").onclick = () => { const d = new Date(ag.y, ag.m - 1, 1); ag.y = d.ge
 $("agnext").onclick = () => { const d = new Date(ag.y, ag.m + 1, 1); ag.y = d.getFullYear(); ag.m = d.getMonth(); agLoad(); };
 $("agadd").onclick = async () => {
   const texte = $("agtxt").value.trim(); if (!texte) return;
-  const { error } = await sb.from("rappels").insert({ qui: $("agwho").value, texte, jour: $("agrep").value === "all" ? null : ag.sel, heure: $("agtime").value || null });
+  const { error } = await sb.from("rappels").insert({ qui: $("agwho").value, texte, jour: $("agrep").value === "all" ? null : ag.sel, heure: $("agtime").value || null, repete: $("agrep").value === "year" ? "annuel" : null });
   if (error) { toast(error.message, true); return; }
   $("agtxt").value = ""; $("agtime").value = ""; agLoad();
 };
+
+/* ---------- Alertes à l'heure du rappel ---------- */
+let todayRows = [], alertShown = new Set();
+try { alertShown = new Set(JSON.parse(localStorage.getItem("alerts-" + isoD(new Date())) || "[]")); } catch { /* rien */ }
+async function loadToday() {
+  const iso = isoD(new Date());
+  const { data } = await sb.from("rappels").select("id,qui,jour,heure,texte,repete").eq("fait", false).not("heure", "is", null).or(`jour.eq.${iso},jour.is.null,repete.eq.annuel`);
+  todayRows = (data || []).filter((r) => r.jour === null || onDay(r, iso));
+}
+function beep() {
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.35, 0.7].forEach((t) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = 880; g.gain.value = 0.2; o.connect(g); g.connect(c.destination); o.start(c.currentTime + t); o.stop(c.currentTime + t + 0.2); });
+  } catch { /* son bloqué */ }
+}
+function checkAlerts() {
+  const d = new Date(), hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"), iso = isoD(d);
+  const due = todayRows.filter((r) => r.heure && r.heure.slice(0, 5) === hm && !alertShown.has(r.id));
+  if (!due.length) return;
+  due.forEach((r) => alertShown.add(r.id));
+  try { localStorage.setItem("alerts-" + iso, JSON.stringify([...alertShown])); } catch { /* rien */ }
+  $("alh").textContent = "Rappel · " + hm;
+  $("altxt").textContent = due.map((r) => (r.qui === "tous" ? "" : NOMS[r.qui] + " : ") + r.texte).join(" — ");
+  manualSleep = false; wakeUntil = Date.now() + 120000; checkSleep();
+  $("alert").classList.add("on"); beep();
+}
+$("alok").onclick = () => $("alert").classList.remove("on");
 
 /* ---------- Démarrage ---------- */
 tick(); setInterval(tick, 10000);
 weather(); setInterval(weather, 15 * 60 * 1000);
 fetchState(); setInterval(fetchState, CONFIG.STATE_POLL_MS);
+loadToday(); setInterval(loadToday, 120000); setInterval(checkAlerts, 15000);
 keepAwake();
 sb.auth.onAuthStateChange(() => fetchState());
 if ("serviceWorker" in navigator) { /* l'écran n'a pas besoin de mode hors ligne */ }
