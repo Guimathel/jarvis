@@ -19,6 +19,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .row{display:flex;align-items:center;gap:12px}
 h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 .mute{color:var(--mute)}
+#date{display:block;background:none;border:0;padding:0;text-align:left;font-weight:500}
 /* en-tête */
 #head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:max(10px,1.4vmin);align-items:stretch}
 #clock{font-size:clamp(40px,8vmin,72px);font-weight:800;line-height:1;letter-spacing:-.02em}
@@ -73,18 +74,51 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 #toast.bad{border-color:var(--red);color:#FFD2CE}
 #login{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
 #login a{background:var(--amber);color:#1A1208;font-weight:800;border-radius:16px;padding:14px 22px;text-decoration:none}
+#modal,#brief{position:fixed;inset:0;z-index:25;background:rgba(5,8,10,.8);display:none;align-items:center;justify-content:center;padding:20px}
+#modal.on,#brief.on{display:flex}
+.dlg{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:24px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:14px}
+.dlg h2{font-size:24px}
+.dlg button{height:64px;border-radius:18px;border:1px solid var(--line);background:#1F2A33;font-weight:800;font-size:18px}
+.dlg button.pri{background:var(--amber);color:#1A1208;border:none}
+.dlg p{margin:0;font-size:18px;line-height:1.45}
+.dlg .who{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin-top:6px}
+#agenda{position:fixed;inset:0;z-index:26;background:rgba(5,8,10,.85);display:none;align-items:center;justify-content:center;padding:14px}
+#agenda.on{display:flex}
+#agenda .dlg{max-width:760px;max-height:100%;overflow:auto;gap:10px;padding:18px}
+.agh{display:flex;align-items:center;justify-content:space-between}
+.agh h2{text-transform:capitalize;font-size:22px}
+.agh button{width:52px;height:52px;border-radius:50%;font-size:22px;padding:0}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal .dw{font-size:12px;color:var(--mute);font-weight:700}
+.cal button{height:46px;border-radius:12px;font-size:16px;font-weight:700;position:relative;padding:0;border:1px solid transparent;background:#1F2A33}
+.cal button.today{border-color:var(--cyan)}
+.cal button.sel{background:var(--amber);color:#1A1208}
+.cal button.hasr::after{content:"";position:absolute;bottom:5px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--cyan)}
+.cal button.sel.hasr::after{background:#1A1208}
+.rl{display:flex;flex-direction:column;gap:6px}
+.ri{display:flex;align-items:center;gap:10px;background:#1F2A33;border-radius:12px;padding:8px 12px;font-size:16px}
+.ri .t{flex:1;min-width:0}.ri .w{font-size:12px;font-weight:800;color:var(--mute);text-transform:uppercase}
+.ri button{width:40px;height:40px;border-radius:50%;font-size:16px;padding:0;border:1px solid var(--line);background:var(--btn)}
+.addf{display:flex;gap:6px;flex-wrap:wrap}
+.addf input,.addf select{height:48px;border-radius:12px;border:1px solid var(--line);background:#1F2A33;color:var(--txt);font:inherit;font-size:16px;padding:0 10px;-webkit-user-select:text;user-select:text}
+.addf input[type=text]{flex:1 1 200px}
+.addf button{height:48px;padding:0 18px;font-size:16px}
 /* portrait */
 @media (orientation:portrait){
   #head{grid-template-columns:auto minmax(0,1fr)}
   #side{grid-column:1 / -1;flex-direction:row}
   #side .pill{flex:1}
   #days{display:none}
-  #main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1.5fr) minmax(0,1fr)}
+  #main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  #tv{flex:none}
+  .room .v{font-size:clamp(22px,3.6vmin,30px)}
+  .room .apps{margin-top:0}
   #rooms{grid-template-columns:repeat(2,minmax(0,1fr))}
   .room{flex-direction:row;align-items:center;gap:8px}
   .room .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
   .room .b{margin:0;gap:6px}
   #foot{flex-wrap:wrap}
+  .sc{flex:1 1 30%}
   .jv{flex:1 1 100%}
 }
 </style>
@@ -92,7 +126,7 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 <body>
 <div id="app">
   <header id="head">
-    <div><div id="clock">--:--</div><div id="date"></div></div>
+    <div><div id="clock">--:--</div><button id="date" aria-label="Ouvrir l'agenda"></button></div>
     <div class="card" id="wx"><div class="ico" id="wico">…</div>
       <div><div class="t" id="wtemp">--°</div><div class="d" id="wdesc">Météo en cours de chargement</div></div>
       <div id="days"></div>
@@ -126,7 +160,9 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 
   <footer id="foot">
     <button class="sc" id="s-confort"><b>Confort</b><span>21° · 22°</span></button>
-    <button class="sc" id="s-nuit"><b>Nuit</b><span>17° · 19°</span></button>
+    <button class="sc" id="s-nuit"><b>Nuit</b><span>17° · 18°</span></button>
+    <button class="sc" id="s-soiree"><b>Soirée</b><span>RDC 23° · TV</span></button>
+    <button class="sc" id="s-bonjour"><b>Bonjour</b><span>Chauffage · météo</span></button>
     <button class="sc" id="s-absent"><b>Je pars</b><span>Chauffage réduit</span></button>
     <button class="sc" id="s-back"><b>Je rentre</b><span>Remet comme avant</span></button>
     <a class="jv" href="index.html">🎤 Parler à Jarvis</a>
@@ -134,6 +170,19 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
 </div>
 
 <button id="sleep" aria-label="Réveiller l'écran"><div class="big" id="sclock">--:--</div><div style="font-size:clamp(16px,3vmin,24px);font-weight:600">Touche l'écran pour le réveiller</div></button>
+<div id="modal"><div class="dlg" role="dialog" aria-label="Soirée"><h2>Soirée : on met quoi ?</h2>
+  <button class="pri" id="m-ibo">IBO Player</button><button id="m-music">Musique</button><button id="m-none">Seulement le chauffage</button></div></div>
+<div id="brief"><div class="dlg" role="dialog" aria-label="Bonjour"><h2 id="bh">Bonjour</h2><div id="bb"></div><button class="pri" id="bclose">OK</button></div></div>
+<div id="agenda"><div class="dlg" role="dialog" aria-label="Agenda">
+  <div class="agh"><button id="agprev" aria-label="Mois précédent">‹</button><h2 id="agtitle"></h2><button id="agnext" aria-label="Mois suivant">›</button></div>
+  <div class="cal" id="cal"></div>
+  <div class="who" id="agday" style="margin-top:4px"></div>
+  <div class="rl" id="agrows"></div>
+  <div class="addf"><select id="agwho" aria-label="Pour qui"><option value="tous">Tous</option><option value="guillaume">Guillaume</option><option value="marion">Marion</option></select>
+    <input type="text" id="agtxt" maxlength="200" placeholder="Nouveau rappel" aria-label="Texte du rappel">
+    <input type="time" id="agtime" aria-label="Heure"><select id="agrep" aria-label="Répétition"><option value="day">Ce jour</option><option value="all">Tous les jours</option></select>
+    <button class="pri" id="agadd">Ajouter</button></div>
+  <button id="agclose">Fermer</button></div></div>
 <div id="toast" role="status"></div>
 <div id="login"><h2>Connexion nécessaire</h2><div class="mute">Connecte-toi d'abord dans Jarvis, puis reviens ici.</div><a href="index.html">Ouvrir Jarvis</a></div>
 
@@ -172,7 +221,7 @@ function tick() {
   const hm = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   $("clock").textContent = hm; $("sclock").textContent = hm;
   const s = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  $("date").textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  $("date").textContent = "📅 " + s.charAt(0).toUpperCase() + s.slice(1);
   checkSleep();
 }
 
@@ -197,6 +246,7 @@ async function keepAwake() {
 document.addEventListener("visibilitychange", keepAwake);
 
 /* ---------- Météo (Open-Meteo, sans clé) ---------- */
+let WXNOW = null;
 const WX = (c) => c === 0 ? ["☀️", "Ciel dégagé"] : c <= 2 ? ["🌤️", "Éclaircies"] : c === 3 ? ["☁️", "Couvert"]
   : c <= 48 ? ["🌫️", "Brouillard"] : c <= 57 ? ["🌦️", "Bruine"] : c <= 67 ? ["🌧️", "Pluie"] : c <= 77 ? ["🌨️", "Neige"]
   : c <= 82 ? ["🌦️", "Averses"] : c <= 86 ? ["🌨️", "Averses de neige"] : ["⛈️", "Orage"];
@@ -207,6 +257,7 @@ async function weather() {
     const c = j.current, [ico, desc] = WX(c.weather_code);
     $("wico").textContent = ico; $("wtemp").textContent = Math.round(c.temperature_2m) + "°";
     $("wdesc").textContent = `${desc} · ressenti ${Math.round(c.apparent_temperature)}° · vent ${Math.round(c.wind_speed_10m)} km/h`;
+    WXNOW = { temp: Math.round(c.temperature_2m), desc: desc.toLowerCase(), max: Math.round(j.daily.temperature_2m_max[0]), min: Math.round(j.daily.temperature_2m_min[0]) };
     $("days").innerHTML = [1, 2, 3].map((i) => {
       const name = new Date(j.daily.time[i] + "T12:00").toLocaleDateString("fr-FR", { weekday: "long" });
       return `<div class="day"><b>${name.charAt(0).toUpperCase() + name.slice(1)}</b>${Math.round(j.daily.temperature_2m_max[i])}° / ${Math.round(j.daily.temperature_2m_min[i])}°<br><span class="mute">${WX(j.daily.weather_code[i])[1]}</span></div>`;
@@ -284,7 +335,7 @@ function render() {
   const v = tv.volume;
   $("bar").firstElementChild.style.width = v && !v.muted ? Math.round((v.level / (v.max || 100)) * 100) + "%" : "0";
   $("vtxt").textContent = !v ? "" : v.muted ? "Son coupé" : `Volume ${v.level} sur ${v.max}`;
-  ["confort", "nuit", "absent"].forEach((k) => $("s-" + k).classList.toggle("act", st?.scene === k));
+  ["confort", "nuit", "soiree", "bonjour", "absent"].forEach((k) => $("s-" + k).classList.toggle("act", st?.scene === k));
   document.querySelectorAll("#foot .sc, #tv button").forEach((b) => (b.disabled = !fresh));
 }
 function adjust(r, step) {
@@ -315,6 +366,115 @@ $("season").onclick = () => {
   const ete = st?.season === "ete";
   if (!ete && !confirm("Passer en mode été : tous les radiateurs seront éteints. Continuer ?")) return;
   cmd({ p_action: "heat", p_op: "season", p_name: ete ? "hiver" : "ete" });
+};
+
+/* ---------- Soirée ---------- */
+async function askJarvis(text) {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) throw new Error("non connecté");
+  const r = await fetch(CONFIG.SUPABASE_URL + "/functions/v1/hyper-processor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + data.session.access_token, apikey: CONFIG.SUPABASE_KEY },
+    body: JSON.stringify({ message: text, mode: "rapide", stream: false }),
+  });
+  const j = await r.json().catch(() => ({}));
+  return j.reply || j.error || "";
+}
+const closeModal = () => $("modal").classList.remove("on");
+$("s-soiree").onclick = () => $("modal").classList.add("on");
+$("modal").onclick = (e) => { if (e.target === $("modal")) closeModal(); };
+$("m-none").onclick = () => { closeModal(); cmd({ p_action: "heat", p_op: "scene", p_name: "soiree" }, "Soirée…"); };
+$("m-ibo").onclick = async () => {
+  closeModal();
+  if (await cmd({ p_action: "heat", p_op: "scene", p_name: "soiree" }, "Soirée…")) cmd({ p_action: "app", p_name: "ibo" });
+};
+$("m-music").onclick = async () => {
+  closeModal();
+  if (!(await cmd({ p_action: "heat", p_op: "scene", p_name: "soiree" }, "Soirée…"))) return;
+  try { toast(((await askJarvis("Mets de la musique d'ambiance pour la soirée sur la télé, une playlist YouTube.")) || "Musique demandée").slice(0, 160)); }
+  catch { toast("Jarvis n'a pas répondu pour la musique.", true); }
+};
+
+/* ---------- Bonjour : chauffage + météo + rappels du jour ---------- */
+let briefTimer;
+function closeBrief() { $("brief").classList.remove("on"); clearTimeout(briefTimer); try { speechSynthesis.cancel(); } catch { /* rien */ } }
+$("bclose").onclick = closeBrief;
+$("brief").onclick = (e) => { if (e.target === $("brief")) closeBrief(); };
+async function briefing() {
+  const d = new Date(), iso = d.toLocaleDateString("sv-SE");
+  let parts = [], rap = [];
+  if (WXNOW) parts.push(`Il fait ${WXNOW.temp} degrés, ${WXNOW.desc}. Aujourd'hui entre ${WXNOW.min} et ${WXNOW.max} degrés.`);
+  const { data } = await sb.from("rappels").select("qui,texte,heure").eq("fait", false).or(`jour.eq.${iso},jour.is.null`).order("id");
+  rap = data || [];
+  const by = (q) => rap.filter((r) => r.qui === q || r.qui === "tous").map((r) => (r.heure ? r.heure.slice(0, 5) + " : " : "") + r.texte);
+  const g = by("guillaume"), m = by("marion");
+  const box = $("bb"); box.innerHTML = "";
+  const add = (cls, txt) => { const e = document.createElement(cls === "who" ? "div" : "p"); if (cls === "who") e.className = "who"; e.textContent = txt; box.appendChild(e); };
+  if (WXNOW) add("p", parts[0]);
+  add("who", "Guillaume"); (g.length ? g : ["Aucun rappel."]).forEach((t) => add("p", t));
+  add("who", "Marion"); (m.length ? m : ["Aucun rappel."]).forEach((t) => add("p", t));
+  $("bh").textContent = d.getHours() < 12 ? "Bonjour" : "Bonjour, voici ta journée";
+  $("brief").classList.add("on");
+  clearTimeout(briefTimer); briefTimer = setTimeout(closeBrief, 90000);
+  try {
+    const say = ["Bonjour.", ...parts, g.length ? "Pour Guillaume : " + g.join(". ") : "Rien de prévu pour Guillaume.", m.length ? "Pour Marion : " + m.join(". ") : "Rien de prévu pour Marion."].join(" ");
+    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(say); u.lang = "fr-FR"; speechSynthesis.speak(u);
+  } catch { /* pas de voix */ }
+}
+$("s-bonjour").onclick = async () => {
+  await cmd({ p_action: "heat", p_op: "scene", p_name: "bonjour" }, "Bonjour…");
+  briefing();
+};
+
+/* ---------- Agenda ---------- */
+const isoD = (d) => d.toLocaleDateString("sv-SE");
+const NOMS = { guillaume: "Guillaume", marion: "Marion", tous: "Tous" };
+let ag = { y: 0, m: 0, sel: "", rows: [] };
+async function agLoad() {
+  const f = isoD(new Date(ag.y, ag.m, 1)), l = isoD(new Date(ag.y, ag.m + 1, 0));
+  const { data, error } = await sb.from("rappels").select("id,qui,jour,heure,texte").eq("fait", false).or(`jour.is.null,and(jour.gte.${f},jour.lte.${l})`).order("heure", { nullsFirst: true });
+  if (error) toast("Agenda illisible : " + error.message, true);
+  ag.rows = data || []; agRender();
+}
+function agRender() {
+  const first = new Date(ag.y, ag.m, 1), today = isoD(new Date());
+  $("agtitle").textContent = first.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const cal = $("cal"); cal.innerHTML = "";
+  ["L", "M", "M", "J", "V", "S", "D"].forEach((d) => { const e = document.createElement("div"); e.className = "dw"; e.textContent = d; cal.appendChild(e); });
+  const lead = (first.getDay() + 6) % 7, n = new Date(ag.y, ag.m + 1, 0).getDate();
+  for (let i = 0; i < lead; i++) cal.appendChild(document.createElement("span"));
+  for (let d = 1; d <= n; d++) {
+    const iso = isoD(new Date(ag.y, ag.m, d)), b = document.createElement("button");
+    b.textContent = d;
+    b.className = (iso === today ? "today " : "") + (iso === ag.sel ? "sel " : "") + (ag.rows.some((r) => r.jour === iso) ? "hasr" : "");
+    b.onclick = () => { ag.sel = iso; agRender(); };
+    cal.appendChild(b);
+  }
+  $("agday").textContent = new Date(ag.sel + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const box = $("agrows"); box.innerHTML = "";
+  const day = ag.rows.filter((r) => r.jour === ag.sel || r.jour === null);
+  if (!day.length) { const e = document.createElement("div"); e.className = "mute"; e.textContent = "Rien de prévu ce jour."; box.appendChild(e); }
+  day.forEach((r) => {
+    const e = document.createElement("div"); e.className = "ri";
+    const t = document.createElement("div"); t.className = "t";
+    const w = document.createElement("div"); w.className = "w"; w.textContent = NOMS[r.qui] + (r.jour === null ? " · tous les jours" : "") + (r.heure ? " · " + r.heure : "");
+    const x = document.createElement("div"); x.textContent = r.texte;
+    t.append(w, x);
+    const del = document.createElement("button"); del.textContent = "✕"; del.setAttribute("aria-label", "Supprimer");
+    del.onclick = async () => { const { error } = await sb.from("rappels").delete().eq("id", r.id); if (error) toast(error.message, true); else agLoad(); };
+    e.append(t, del); box.appendChild(e);
+  });
+}
+function agOpen() { const d = new Date(); ag.y = d.getFullYear(); ag.m = d.getMonth(); ag.sel = isoD(d); $("agenda").classList.add("on"); agLoad(); }
+$("date").onclick = agOpen;
+$("agclose").onclick = () => $("agenda").classList.remove("on");
+$("agprev").onclick = () => { const d = new Date(ag.y, ag.m - 1, 1); ag.y = d.getFullYear(); ag.m = d.getMonth(); agLoad(); };
+$("agnext").onclick = () => { const d = new Date(ag.y, ag.m + 1, 1); ag.y = d.getFullYear(); ag.m = d.getMonth(); agLoad(); };
+$("agadd").onclick = async () => {
+  const texte = $("agtxt").value.trim(); if (!texte) return;
+  const { error } = await sb.from("rappels").insert({ qui: $("agwho").value, texte, jour: $("agrep").value === "all" ? null : ag.sel, heure: $("agtime").value || null });
+  if (error) { toast(error.message, true); return; }
+  $("agtxt").value = ""; $("agtime").value = ""; agLoad();
 };
 
 /* ---------- Démarrage ---------- */
