@@ -169,12 +169,12 @@ h2{margin:0;font-size:clamp(16px,2.4vmin,22px);font-weight:800}
   </main>
 
   <footer id="foot">
-    <button class="sc" id="s-confort"><b>Confort</b><span>21° · 22°</span></button>
-    <button class="sc" id="s-nuit"><b>Nuit</b><span>17° · 18°</span></button>
+    <button class="sc" id="s-confort"><b>Confort</b><span>RDC 23° · reste 21°</span></button>
+    <button class="sc" id="s-nuit"><b>Nuit</b><span>RDC 18° · reste 17°</span></button>
     <button class="sc" id="s-soiree"><b>Soirée</b><span>RDC 23° · TV</span></button>
     <button class="sc" id="s-bonjour"><b>Bonjour</b><span>Chauffage · météo</span></button>
-    <button class="sc" id="s-absent"><b>Je pars</b><span>Chauffage réduit</span></button>
-    <button class="sc" id="s-back"><b>Je rentre</b><span>Remet comme avant</span></button>
+    <button class="sc" id="s-absent"><b>Je pars</b><span>Tout à 18°</span></button>
+    <button class="sc" id="s-back"><b>Je rentre</b><span>Comme Confort</span></button>
     <a class="jv" href="index.html">🎤 Parler à Jarvis</a>
   </footer>
 </div>
@@ -371,8 +371,8 @@ act("ahome", { p_action: "home" });
 act("aibo", { p_action: "app", p_name: "ibo" }, "IBO Player…");
 act("s-confort", { p_action: "heat", p_op: "scene", p_name: "confort" }, "Scène Confort…");
 act("s-nuit", { p_action: "heat", p_op: "scene", p_name: "nuit" }, "Scène Nuit…");
-act("s-absent", { p_action: "heat", p_op: "scene", p_name: "absent" }, "Chauffage réduit…");
-act("s-back", { p_action: "heat", p_op: "restore", p_name: "absent" }, "Retour à l'état d'avant…");
+act("s-absent", { p_action: "heat", p_op: "scene", p_name: "absent" }, "Tout à 18°…");
+act("s-back", { p_action: "heat", p_op: "scene", p_name: "confort" }, "Retour : mode confort…");
 $("season").onclick = () => {
   const ete = st?.season === "ete";
   if (!ete && !confirm("Passer en mode été : tous les radiateurs seront éteints. Continuer ?")) return;
