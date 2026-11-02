@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnostic Jarvis</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0F1418;color:#E8EEF2;margin:0;padding:16px;font-size:18px;line-height:1.4}
+h1{font-size:22px;margin:0 0 12px}
+.t{background:#1B252D;border-radius:12px;padding:10px 14px;margin:8px 0}
+.ok{color:#8EE0B2}.ko{color:#FF8A80;font-weight:700}.w{color:#F2B25D}
+button,input{font-size:18px;padding:12px;border-radius:10px;border:1px solid #3A4852;background:#26323B;color:#E8EEF2;width:100%;box-sizing:border-box;margin:4px 0}
+button{background:#F2A154;color:#1A1208;font-weight:800;border:none}
+pre{white-space:pre-wrap;word-break:break-word;font-size:15px;margin:6px 0 0}
+</style></head><body>
+<h1>Diagnostic de connexion</h1>
+<div id="out"></div>
+<div class="t"><b>Test de connexion</b><br>
+<input id="e" type="email" placeholder="Adresse mail" autocomplete="username">
+<input id="p" type="password" placeholder="Mot de passe" autocomplete="current-password">
+<button id="go">Tester la connexion</button>
+<pre id="res"></pre></div>
+<script src="supabase.js"></script>
+<script>
+const URL_SB = "https://qcmfubynjidftonhrldt.supabase.co", KEY = "sb_publishable_M9MRnq1rsD7WQ5Ors-8BOg_DVqandAa";
+const out = document.getElementById("out");
+function line(ok, label, detail) {
+  const d = document.createElement("div"); d.className = "t";
+  d.innerHTML = '<span class="' + (ok === true ? "ok" : ok === false ? "ko" : "w") + '">' + (ok === true ? "✔ " : ok === false ? "✘ " : "• ") + label + "</span>" + (detail ? "<pre></pre>" : "");
+  if (detail) d.querySelector("pre").textContent = detail;
+  out.appendChild(d);
+}
+window.addEventListener("error", (e) => line(false, "Erreur de page", e.message + " (" + (e.filename || "").split("/").pop() + ":" + e.lineno + ")"));
+window.addEventListener("unhandledrejection", (e) => line(false, "Erreur non gérée", String(e.reason && e.reason.message || e.reason)));
+
+// 1. Appareil
+const now = new Date();
+line(null, "Heure de l'appareil : " + now.toLocaleString("fr-FR") + " (fuseau " + Intl.DateTimeFormat().resolvedOptions().timeZone + ")", "Doit correspondre à l'heure réelle, à la minute près.");
+line(null, "Navigateur", navigator.userAgent + "\nEn ligne : " + navigator.onLine + "\nMode installé : " + (matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches));
+
+// 2. Stockage
+try { localStorage.setItem("diag", "1"); localStorage.removeItem("diag"); line(true, "Stockage du navigateur : fonctionne"); }
+catch (e) { line(false, "Stockage du navigateur bloqué", e.message); }
+
+// 3. Service workers
+if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistrations().then((r) => line(null, "Service workers enregistrés : " + r.length, r.map((x) => x.scope).join("\n")));
+
+// 4. Bibliothèque locale
+if (window.supabase && window.supabase.createClient) line(true, "supabase.js (hébergé chez toi) : chargé");
+else line(false, "supabase.js (hébergé chez toi) : NON chargé", "Le fichier supabase.js est absent du dépôt jarvis ou bloqué.");
+
+// 5. Réseau vers Supabase
+async function ping(label, url, opt) {
+  const t0 = performance.now();
+  try {
+    const r = await fetch(url, Object.assign({ cache: "no-store" }, opt || {}));
+    line(true, label + " : réponse " + r.status + " en " + Math.round(performance.now() - t0) + " ms");
+  } catch (e) { line(false, label + " : ÉCHEC", e.name + " : " + e.message); }
+}
+ping("Supabase (auth)", URL_SB + "/auth/v1/health", { headers: { apikey: KEY } });
+ping("Supabase (données)", URL_SB + "/rest/v1/", { headers: { apikey: KEY } });
+ping("jsdelivr (ancienne bibliothèque)", "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2", { mode: "no-cors" });
+
+// 6. Connexion
+document.getElementById("go").onclick = async () => {
+  const res = document.getElementById("res"); res.textContent = "Test en cours…";
+  if (!(window.supabase && window.supabase.createClient)) { res.textContent = "supabase.js non chargé."; return; }
+  try {
+    const c = window.supabase.createClient(URL_SB, KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const t0 = performance.now();
+    const { data, error } = await Promise.race([
+      c.auth.signInWithPassword({ email: document.getElementById("e").value.trim(), password: document.getElementById("p").value }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Pas de réponse au bout de 20 s")), 20000)),
+    ]);
+    const ms = Math.round(performance.now() - t0);
+    res.textContent = error ? "ÉCHEC après " + ms + " ms\n" + error.name + " (" + (error.status || "?") + ") : " + error.message
+                            : "RÉUSSI en " + ms + " ms. Compte : " + data.user.email;
+  } catch (e) { res.textContent = "ERREUR : " + e.name + " : " + e.message; }
+};
+</script>
+</body></html>
